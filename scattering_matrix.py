@@ -88,14 +88,14 @@ class ScatteringMatrix(object):
         self.T_p = c_void_p(self.T.ctypes.data)
 
         # Connect to cpp library.
-        self.lib = cdll.LoadLibrary(lib_path)
+        lib = cdll.LoadLibrary(lib_path)
 
-        self.lib.solve(self.fd.pTE, self.fd.pTM, self.fd.theta, self.fd.phi,
-                       self.ml.wvl_p, self.ml.N_polar_p, self.ml.num_wvl,
-                       self.ml.L_polar, self.ml.N_A, self.ml.N_B, self.ml.L_A,
-                       self.ml.L_B, self.ml.num_uc, self.ml.N_inc, self.ml.N_sub,
-                       self.R_p, self.T_p)
+        lib.solve(self.fd.pTE, self.fd.pTM, self.fd.theta, self.fd.phi,
+                  self.ml.wvl_p, self.ml.N_polar_p, self.ml.num_wvl,
+                  self.ml.L_polar, self.ml.N_A, self.ml.N_B, self.ml.L_A,
+                  self.ml.L_B, self.ml.num_uc, self.ml.N_inc, self.ml.N_sub,
+                  self.R_p, self.T_p)
 
         # Disconnect from cpp library.
-        handle = self.lib._handle
+        handle = lib._handle
         kernel32.FreeLibrary(handle)
