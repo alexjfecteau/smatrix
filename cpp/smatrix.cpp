@@ -23,39 +23,49 @@ typedef std::complex<double> dcomp;
 
 Matrix2cd I = Matrix2cd::Identity();
 Matrix2cd Z = Matrix2cd::Zero();
-Matrix2cd Omega, Q, V, V_h, Vp, X, A, A_inv, B, M, D, D_inv;
+
+extern "C" {
 
 // Function prototypes for ctype import in python.
 
-extern "C" {
 DLLEXPORT void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, dcomp* N_polar_p, int num_wvl,
                      double L_polar, double N_A, double N_B, double L_A, double L_B, int num_uc, double N_inc, double N_sub,
                      double* R_p, double* T_p);
 }
 
-// Functions to compute EM scattering in multilayer.
+class SMatrix
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    Matrix2cd S_11;
+    Matrix2cd S_12;
+    Matrix2cd S_21;
+    Matrix2cd S_22;
+};
 
-void redheffer(Matrix2cd& SA_11, Matrix2cd& SA_12, Matrix2cd& SA_21, Matrix2cd& SA_22,
-               const Matrix2cd& SB_11, const Matrix2cd& SB_12, const Matrix2cd& SB_21, const Matrix2cd& SB_22)
+SMatrix redheffer(SMatrix SA, SMatrix SB)
 {
     // Compute Redheffer star product.
 
     Matrix2cd E, F;
-    E = SA_12*(I - SB_11*SA_22).inverse();
-    F = SB_21*(I - SA_22*SB_11).inverse();
+    E = SA.S_12*(I - SB.S_11*SA.S_22).inverse();
+    F = SB.S_21*(I - SA.S_22*SB.S_11).inverse();
 
-    SA_11 = SA_11 + E*SB_11*SA_21;
-    SA_12 = E*SB_12;
-    SA_21 = F*SA_21;
-    SA_22 = SB_22 + F*SA_22*SB_12;
+    SMatrix SAB;
+    SAB.S_11 = SA.S_11 + E*SB.S_11*SA.S_21;
+    SAB.S_12 = E*SB.S_12;
+    SAB.S_21 = F*SA.S_21;
+    SAB.S_22 = SB.S_22 + F*SA.S_22*SB.S_12;
+    return SAB;
 }
 
-void s_inf(bool ref, double kx, double ky, dcomp kz, dcomp eps_r, Matrix2cd& V_h,
-           Matrix2cd& S_11, Matrix2cd& S_12, Matrix2cd& S_21, Matrix2cd& S_22)
+SMatrix s_inf(bool ref, double kx, double ky, dcomp kz, dcomp eps_r, Matrix2cd V_h)
 {
     // Compute scattering matrix for semi-infinite medium.
     // bool ref = true : Reflection side.
     // bool ref = false : Transmission side.
+
+    Matrix2cd Q, Omega, V, Vp, X, A, A_inv, B;
 
     Q << kx*ky, eps_r - pow(kx, 2),
          pow(ky, 2) - eps_r, -kx*ky;
@@ -67,27 +77,31 @@ void s_inf(bool ref, double kx, double ky, dcomp kz, dcomp eps_r, Matrix2cd& V_h
     B = I - Vp;
     A_inv = A.inverse();
 
+    SMatrix SM;
+
     if (ref)
     {
-        S_11 = -A_inv*B;
-        S_12 = 2*A_inv;
-        S_21 = 0.5*(A - B*A_inv*B);
-        S_22 = B*A_inv;
+        SM.S_11 = -A_inv*B;
+        SM.S_12 = 2*A_inv;
+        SM.S_21 = 0.5*(A - B*A_inv*B);
+        SM.S_22 = B*A_inv;
     }
     else
     {
-        S_11 = B*A_inv;
-        S_12 = 0.5*(A - B*A_inv*B);
-        S_21 = 2*A_inv;
-        S_22 = -A_inv*B;
+        SM.S_11 = B*A_inv;
+        SM.S_12 = 0.5*(A - B*A_inv*B);
+        SM.S_21 = 2*A_inv;
+        SM.S_22 = -A_inv*B;
     }
 
+    return SM;
 }
 
-void s_layer(double k0, double kx, double ky, dcomp kz, dcomp eps_r, Matrix2cd& V_h, double L,
-             Matrix2cd& S_11, Matrix2cd& S_12, Matrix2cd& S_21, Matrix2cd& S_22)
+SMatrix s_layer(double k0, double kx, double ky, dcomp kz, dcomp eps_r, Matrix2cd& V_h, double L)
 {
     // Compute scattering matrix for layer of finite size.
+
+    Matrix2cd Q, Omega, V, Vp, X, A, A_inv, B, M, D, D_inv;
 
     Q << kx*ky, eps_r - pow(kx, 2),
          pow(ky, 2) - eps_r, -kx*ky;
@@ -103,16 +117,18 @@ void s_layer(double k0, double kx, double ky, dcomp kz, dcomp eps_r, Matrix2cd& 
     D = A - M*B;
     D_inv = D.inverse();
 
-    S_11 = D_inv*(M*A - B);
-    S_22 = S_11;
-    S_12 = D_inv*X*(A - B*A_inv*B);
-    S_21 = S_12;
+    SMatrix SM;
+    SM.S_11 = D_inv*(M*A - B);
+    SM.S_22 = SM.S_11;
+    SM.S_12 = D_inv*X*(A - B*A_inv*B);
+    SM.S_21 = SM.S_12;
+
+    return SM;
 }
 
 void R_T_coeffs(double pTE, double pTM, double theta, double phi,
-                double kx, double ky, dcomp kz_ref, dcomp kz_trn,
-                Matrix2cd& S_11, Matrix2cd& S_12, Matrix2cd& S_21, Matrix2cd& S_22,
-                double& R, double& T)
+                double kx, double ky, dcomp kz_refl, dcomp kz_tran,
+                SMatrix SGlob, double& R, double& T)
 {
     // Compute polarization vector of incident fields.
     Vector3d k_inc(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta));
@@ -135,21 +151,21 @@ void R_T_coeffs(double pTE, double pTM, double theta, double phi,
     P.normalize();
 
     // Compute reflected and transmitted fields.
-    Vector2cd e_src(P(0), P(1)), e_ref, e_trn;
+    Vector2cd e_src(P(0), P(1)), e_refl, e_tran;
 
-    e_ref = S_11*e_src;
-    e_trn = S_21*e_src;
+    e_refl = SGlob.S_11*e_src;
+    e_tran = SGlob.S_21*e_src;
 
     // Compute normal field components.
-    dcomp ez_ref = -(kx*e_ref(0) + ky*e_ref(1))/kz_ref;
-    dcomp ez_trn = -(kx*e_trn(0) + ky*e_trn(1))/kz_trn;
+    dcomp ez_refl = -(kx*e_refl(0) + ky*e_refl(1))/kz_refl;
+    dcomp ez_tran = -(kx*e_tran(0) + ky*e_tran(1))/kz_tran;
 
-    Vector3cd E_ref(e_ref(0), e_ref(1), ez_ref);
-    Vector3cd E_trn(e_trn(0), e_trn(1), ez_trn);
+    Vector3cd E_refl(e_refl(0), e_refl(1), ez_refl);
+    Vector3cd E_tran(e_tran(0), e_tran(1), ez_tran);
 
     // Compute reflectance and transmittance coefficients.
-    R = E_ref.squaredNorm();
-    T = (kz_trn/kz_ref).real() * E_trn.squaredNorm();
+    R = E_refl.squaredNorm();
+    T = (kz_tran/kz_refl).real() * E_tran.squaredNorm();
 }
 
 void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, dcomp* N_polar_p, int num_wvl,
@@ -165,6 +181,7 @@ void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, dcom
     double ky = N_inc*sin(M_PI*theta/180.0)*sin(M_PI*phi/180.0);
 
     // Gap parameters.
+    Matrix2cd V_h;
     V_h << kx*ky, 1.0 + ky*ky,
            -1.0 - kx*kx, -kx*ky;
     V_h = -1i*V_h;
@@ -186,67 +203,53 @@ void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, dcom
     dcomp kz_A = sqrt(eps_r_A - pow(kx, 2) - pow(ky, 2));
     dcomp kz_B = sqrt(eps_r_B - pow(kx, 2) - pow(ky, 2));
 
-    // Define matrices for scattering computation.
-    Matrix2cd Sglob_11, Sglob_12, Sglob_21, Sglob_22;
-    Matrix2cd S_11, S_12, S_21, S_22;
-    Matrix2cd Sref_11, Sref_12, Sref_21, Sref_22;
-    Matrix2cd Strn_11, Strn_12, Strn_21, Strn_22;
-    Matrix2cd Suc_11, Suc_12, Suc_21, Suc_22;
+    // Scattering matrices.
+    SMatrix SGlob, SRefl, STran, SPolar, SBragg, SLayerA, SLayerB;
 
     // Compute scattering matrix for reflection side and
-    // update global scattering matrix using Redheffer star product.
-    s_inf(true, kx, ky, kz_inc, eps_r_inc, V_h, Sref_11, Sref_12, Sref_21, Sref_22);
+    SRefl = s_inf(true, kx, ky, kz_inc, eps_r_inc, V_h);
 
     // Compute scattering matrix for transmission side.
-    s_inf(false, kx, ky, kz_sub, eps_r_sub, V_h, Strn_11, Strn_12, Strn_21, Strn_22);
+    STran = s_inf(false, kx, ky, kz_sub, eps_r_sub, V_h);
 
     // Loop through all wavelengths.
     for (int q=0; q<num_wvl; q++)
     {
         // Start with scattering matrix on reflection side.
-        Sglob_11 = Sref_11;
-        Sglob_12 = Sref_12;
-        Sglob_21 = Sref_21;
-        Sglob_22 = Sref_22;
+        SGlob.S_11 = SRefl.S_11;
+        SGlob.S_12 = SRefl.S_12;
+        SGlob.S_21 = SRefl.S_21;
+        SGlob.S_22 = SRefl.S_22;
 
         // Compute scattering matrix for polar material and
         // update global scattering matrix.
-        s_layer(k0(q), kx, ky, kz_polar(q), eps_r_polar(q), V_h, L_polar,
-                S_11, S_12, S_21, S_22);
-        redheffer(Sglob_11, Sglob_12, Sglob_21, Sglob_22,
-                  S_11, S_12, S_21, S_22);
+        SPolar = s_layer(k0(q), kx, ky, kz_polar(q), eps_r_polar(q), V_h, L_polar);
+        SGlob = redheffer(SGlob, SPolar);
 
         // Compute scattering matrix for unit cell of Bragg reflector and
         // update global scattering matrix.
-        s_layer(k0(q), kx, ky, kz_A, eps_r_A, V_h, L_A,
-                Suc_11, Suc_12, Suc_21, Suc_22);
-        s_layer(k0(q), kx, ky, kz_B, eps_r_B, V_h, L_B,
-                S_11, S_12, S_21, S_22);
-        redheffer(Suc_11, Suc_12, Suc_21, Suc_22,
-                  S_11, S_12, S_21, S_22);
+        SLayerA = s_layer(k0(q), kx, ky, kz_A, eps_r_A, V_h, L_A);
+        SLayerB = s_layer(k0(q), kx, ky, kz_B, eps_r_B, V_h, L_B);
+        SBragg = redheffer(SLayerA, SLayerB);
 
         // Loop through all unit cells.
         for (int p=0; p<num_uc; p++)
         {
             // Update global scattering matrix using Redheffer star product.
-            redheffer(Sglob_11, Sglob_12, Sglob_21, Sglob_22,
-                      Suc_11, Suc_12, Suc_21, Suc_22);
+            SGlob = redheffer(SGlob, SBragg);
         }
 
         // Finish by multiplying global scattering matrix by scattering matrix
         // on transmission side using Redheffer star product.
-        redheffer(Sglob_11, Sglob_12, Sglob_21, Sglob_22, Strn_11, Strn_12, Strn_21, Strn_22);
+        SGlob = redheffer(SGlob, STran);
 
         // Compute reflection and transmission coefficients.
-        R_T_coeffs(pTE, pTM, theta, phi, kx, ky, kz_inc, kz_sub,
-                   Sglob_11, Sglob_12, Sglob_21, Sglob_22,
-                   R[q], T[q]);
+        R_T_coeffs(pTE, pTM, theta, phi, kx, ky, kz_inc, kz_sub, SGlob, R[q], T[q]);
 
-        //std::cout << Sglob_11 << std::endl;
-        //std::cout << Sglob_12 << std::endl;
-        //std::cout << Sglob_21 << std::endl;
-        //std::cout << Sglob_22 << std::endl;
+        //std::cout << SGlob.S_11 << std::endl;
+        //std::cout << SGlob.S_12 << std::endl;
+        //std::cout << SGlob.S_21 << std::endl;
+        //std::cout << SGlob.S_22 << std::endl;
         //std::cin.get();
     }
-
 }

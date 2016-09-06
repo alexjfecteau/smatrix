@@ -5,4 +5,8 @@
 
 __author__ = "Alexandre Juneau Fecteau"
 
-from .scattering_matrix import Multilayer, Fields, ScatteringMatrix
+from .scattering_matrix import SimpleLayer
+from .scattering_matrix import PolarLayer
+from .scattering_matrix import MultiLayer
+from .scattering_matrix import Fields
+from .scattering_matrix import ScatteringMatrix
