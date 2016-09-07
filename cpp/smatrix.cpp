@@ -24,9 +24,43 @@ typedef std::complex<double> dcomp;
 Matrix2cd I = Matrix2cd::Identity();
 Matrix2cd Z = Matrix2cd::Zero();
 
+class SingleLayer
+{
+public:
+    Map<ArrayXd> wvl;
+    Map<ArrayXcd> N;
+    const double thickness;
+    const int size_array;
+    SingleLayer(double* wvl_p, dcomp* N_p, int size, double d) : wvl(wvl_p, size), N(N_p, size), size_array(size), thickness(d) {}
+};
+
+class MultiLayer
+{
+public:
+    const int num_uc;
+    MultiLayer() : num_uc(10) {}
+};
+
 extern "C" {
 
-// Function prototypes for ctype import in python.
+// Functions for ctype import in python.
+
+DLLEXPORT SingleLayer* NewSingleLayer(double* wvl_p, dcomp* N_p, int size, double d)
+    {
+        return new SingleLayer(wvl_p, N_p, size, d);
+    }
+
+// TODO : Function to destroy instances of SingleLayer
+
+DLLEXPORT MultiLayer* NewMultiLayer(void)
+    {
+        return new MultiLayer();
+    }
+
+DLLEXPORT void PrintWvl(SingleLayer* layer)
+    {
+        std::cout << layer->size_array << std::endl;
+    }
 
 DLLEXPORT void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, dcomp* N_polar_p, int num_wvl,
                      double L_polar, double N_A, double N_B, double L_A, double L_B, int num_uc, double N_inc, double N_sub,

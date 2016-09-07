@@ -9,49 +9,74 @@ from ctypes import c_double, c_int, c_void_p
 kernel32 = windll.LoadLibrary('kernel32')
 kernel32.FreeLibrary.argtypes = [wintypes.HMODULE]
 
+# Connect to cpp library
 pkg_path = os.path.dirname(os.path.abspath(__file__))
 lib_path = os.path.join(pkg_path, "bin", "smatrix.dll")
+lib = cdll.LoadLibrary(lib_path)
 
 
-class SimpleLayer(object):
+def close_session():
+    """Disconnect from cpp library"""
+    handle = lib._handle
+    kernel32.FreeLibrary(handle)
+
+
+class Fields(object):
+
+    """Properties of incident EM fields"""
+
+    def __init__(self, wvl, pTE, pTM, theta, phi):
+        """Polarization vector components and angles of incidence
+
+        Input:
+        wvl     : Wavelength array of incident fields (m)
+        pTE     : TE component of incident electric field
+        pTM     : TM component of incident electric field
+        theta   : Angle of incidence with respect to normal (degrees)
+        phi     : Angle of incidence on surface plane (degrees)
+        """
+        self.wvl = wvl.astype(np.double)
+        self.pTE = c_double(pTE)
+        self.pTM = c_double(pTM)
+        self.theta = c_double(theta)
+        self.phi = c_double(phi)
+
+
+class SingleLayerNoDisp(object):
     """Single layer of a simple material with no dispersion"""
 
-    def __init__(self, n, d):
+    def __init__(self, n, d, wvl):
         """
         Input:
-        n : Refractive index
-        d : Thickness of layer (m)
-        """
-        self.n = n
-
-        self.N = np.array(self.n, dtype=np.complex)
-        self.d = c_double(d)
-
-    def generate_N_for_wvl(self, wvl):
-        """Generate refractive index array for new wavelength array"""
-        self.wvl = wvl.astype(np.double)
-        self.N = self.n*np.ones(len(self.wvl), dtype=np.complex)
-
-
-class PolarLayer(object):
-    """Single layer of a polar material with dispersion relation"""
-
-    def __init__(self, wvl, N, d):
-        """
-        Input:
-        wvl : Wavelengths array for dispersion relation
-        N   : Complex refractive index array for dispersion relation
+        n   : Refractive index
         d   : Thickness of layer (m)
+        wvl : Wavelength of incident field (m)
         """
-        self.unit_cell = []           # List of layers in unit cell
-
-        self.wvl_disp = wvl.astype(np.double)
-        self.N_disp = N.astype(np.complex)
-
-        self.wvl = self.wvl_disp
-        self.N = self.N_disp
+        self.wvl = wvl.astype(np.double)
+        self.N = n*np.ones(len(self.wvl), dtype=np.complex)
         self.d = c_double(d)
         self.num_wvl = c_int(len(self.wvl))
+        self.layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
+
+
+class SingleLayerDisp(object):
+    """Single layer of a polar material with dispersion relation"""
+
+    def __init__(self, wvl_disp, N_disp, d, wvl):
+        """
+        Input:
+        wvl_disp : Wavelengths array for dispersion relation
+        N_disp   : Complex refractive index array for dispersion relation
+        d        : Thickness of layer (m)
+        """
+        self.wvl_disp = wvl_disp.astype(np.double)
+        self.N_disp = N_disp.astype(np.complex)
+
+        self.generate_N_for_wvl(wvl)
+        self.d = c_double(d)
+        self.num_wvl = c_int(len(self.wvl))
+        self.layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
+        #lib.PrintWvl(self.layer)
 
     def generate_N_for_wvl(self, wvl):
         """Interpolate refractive index for new wavelength array using cubic splines"""
@@ -59,7 +84,7 @@ class PolarLayer(object):
         k_interp = interp1d(self.wvl_disp, self.N_disp.imag, kind="cubic")
 
         self.wvl = wvl.astype(np.double)
-        self.N = n_interp(self.wvl) + 1j*k_interp(self.wvl)
+        self.N = n_interp(wvl) + 1j*k_interp(wvl)
 
         # TODO : Raise error of interpolation range is larger than dispersion data
 
@@ -91,27 +116,6 @@ class MultiLayer(object):
         self.num_uc.value = num
 
 
-class Fields(object):
-
-    """Properties of incident EM fields"""
-
-    def __init__(self, wvl, pTE, pTM, theta, phi):
-        """Polarization vector components and angles of incidence
-
-        Input:
-        wvl     : Wavelength array of incident fields (m)
-        pTE     : TE component of incident electric field
-        pTM     : TM component of incident electric field
-        theta   : Angle of incidence with respect to normal (degrees)
-        phi     : Angle of incidence on surface plane (degrees)
-        """
-        self.wvl = wvl.astype(np.double)
-        self.pTE = c_double(pTE)
-        self.pTM = c_double(pTM)
-        self.theta = c_double(theta)
-        self.phi = c_double(phi)
-
-
 class ScatteringMatrix(object):
 
     """Scattering matrix for multilayer
@@ -126,13 +130,13 @@ class ScatteringMatrix(object):
         self.N_sub = c_double(N_sub)  # Refractive index of substrate
 
         # Make a list of all single layers
-        self.single_layers = self.find_single_layers(self.ml)
+        #self.single_layers = self.find_single_layers(self.ml)
 
         # Find most effective layer order for computation
         #self.steps = []  # Each element is a step of computation
         #self.steps.append(self.single_layers)  # First step is the single layers
         #self.uc_hierarchy = self.order_layers(self.ml, self.single_layers)
-        self.uc = self.find_unit_cells(self.ml)
+        #self.uc = self.find_unit_cells(self.ml)
 
         # Create pointers to pass arrays to cpp library
         #self.wvl_p = c_void_p(self.wvl.ctypes.data)
@@ -160,29 +164,6 @@ class ScatteringMatrix(object):
                 unit_cells.extend(self.find_unit_cells(layer))
         return unit_cells
 
-#    def find_matrices(self, multilayer):
-#        """Find order in which to compute matrices."""
-#        matrices = []
-#        for layer in multilayer.unit_cell:
-#            if layer not in matrices:
-#                matrices.append(matrices)
-#            else:
-#                matrices.extend(self.find_matrices(layer))
-#        return matrices
-
-
-#    def order_layers(self, multilayer, single_layers):
-#        """Find hierarchy of unit cells.
-#        """
-#        hierarchy = []
-#        for layer in multilayer.unit_cell:
-#            name = type(layer).__name__
-#            if name == "MultiLayer":
-#                hierarchy.append(self.order_layers(layer, single_layers))
-#            else:
-#                hierarchy.append(single_layers.index(layer))
-#        return hierarchy
-
     def solve(self):
         """Solve scattering matrix problem to get reflection and
            transmission coefficients of multilayer
@@ -192,15 +173,8 @@ class ScatteringMatrix(object):
         self.R_p = c_void_p(self.R.ctypes.data)
         self.T_p = c_void_p(self.T.ctypes.data)
 
-        # Connect to cpp library
-        lib = cdll.LoadLibrary(lib_path)
-
         lib.solve(self.fd.pTE, self.fd.pTM, self.fd.theta, self.fd.phi,
                   self.ml.wvl_p, self.ml.N_polar_p, self.ml.num_wvl,
                   self.ml.L_polar, self.ml.N_A, self.ml.N_B, self.ml.L_A,
                   self.ml.L_B, self.ml.num_uc, self.ml.N_inc, self.ml.N_sub,
                   self.R_p, self.T_p)
-
-        # Disconnect from cpp library
-        handle = lib._handle
-        kernel32.FreeLibrary(handle)
