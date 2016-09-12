@@ -5,6 +5,7 @@
 #include <iostream>
 #include <complex>
 #include <cmath>
+#include <vector>
 #include <Eigen/Dense>
 #include <unsupported/Eigen/MatrixFunctions>
 
@@ -24,6 +25,8 @@ typedef std::complex<double> dcomp;
 Matrix2cd I = Matrix2cd::Identity();
 Matrix2cd Z = Matrix2cd::Zero();
 
+class Layer;
+
 class SingleLayer
 {
 public:
@@ -37,34 +40,78 @@ public:
 class MultiLayer
 {
 public:
-    const int num_uc;
-    MultiLayer() : num_uc(10) {}
+    int num_uc;
+    int num_layers;
+    std::vector<Layer*> unit_cell;
+    MultiLayer()
+    {
+        num_uc = 1;
+        num_layers = 0;
+    }
+    void add_to_unit_cell(Layer* layer_p)
+    {
+        num_layers += 1;
+        unit_cell.resize(num_layers, layer_p);
+    }
+    void clear_unit_cell()
+    {
+        unit_cell.clear();
+    }
+    void set_num_repetitions(int n)
+    {
+        num_uc = n;
+    }
 };
+
+class Layer
+{
+public:
+    enum LayerType {single, multi} type;
+    SingleLayer* single_p;
+    MultiLayer* multi_p;
+    Layer(LayerType t) : type(t) {}
+};
+
 
 extern "C" {
 
-// Functions for ctype import in python.
-
-DLLEXPORT SingleLayer* NewSingleLayer(double* wvl_p, dcomp* N_p, int size, double d)
+// Functions for SingleLayer class
+DLLEXPORT Layer* NewSingleLayer(double* wvl_p, dcomp* N_p, int size, double d)
     {
-        return new SingleLayer(wvl_p, N_p, size, d);
+        SingleLayer* single_p = new SingleLayer(wvl_p, N_p, size, d);
+        Layer* layer_p = new Layer(Layer::single);
+        layer_p->single_p = single_p;
+        return layer_p;
     }
 
 // TODO : Function to destroy instances of SingleLayer
 
-DLLEXPORT MultiLayer* NewMultiLayer(void)
+// Functions for MultiLayer class
+DLLEXPORT Layer* NewMultiLayer()
     {
-        return new MultiLayer();
+        MultiLayer* multi_p = new MultiLayer();
+        Layer* layer_p = new Layer(Layer::multi);
+        layer_p->multi_p = multi_p;
+        return layer_p;
     }
 
-DLLEXPORT void PrintWvl(SingleLayer* layer)
+DLLEXPORT void AddToUnitCell(Layer* multilayer, Layer* single_layer)
     {
-        std::cout << layer->size_array << std::endl;
+        multilayer->multi_p->add_to_unit_cell(single_layer);
     }
 
-DLLEXPORT void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, dcomp* N_polar_p, int num_wvl,
-                     double L_polar, double N_A, double N_B, double L_A, double L_B, int num_uc, double N_inc, double N_sub,
-                     double* R_p, double* T_p);
+DLLEXPORT void ClearUnitCell(Layer* multilayer)
+    {
+        multilayer->multi_p->clear_unit_cell();
+    }
+
+DLLEXPORT void SetNumRepetitions(Layer* multilayer, int n)
+    {
+        multilayer->multi_p->set_num_repetitions(n);
+    }
+
+DLLEXPORT void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl,
+                     Layer* multilayer, double N_inc, double N_sub, double* R, double* T);
 }
 
 class SMatrix
@@ -79,7 +126,7 @@ public:
 
 SMatrix redheffer(SMatrix SA, SMatrix SB)
 {
-    // Compute Redheffer star product.
+    // Compute Redheffer star product
 
     Matrix2cd E, F;
     E = SA.S_12*(I - SB.S_11*SA.S_22).inverse();
@@ -93,11 +140,11 @@ SMatrix redheffer(SMatrix SA, SMatrix SB)
     return SAB;
 }
 
-SMatrix s_inf(bool ref, double kx, double ky, dcomp kz, dcomp eps_r, Matrix2cd V_h)
+SMatrix s_inf(bool ref, double kx, double ky, Matrix2cd V_h, dcomp kz, dcomp eps_r)
 {
-    // Compute scattering matrix for semi-infinite medium.
-    // bool ref = true : Reflection side.
-    // bool ref = false : Transmission side.
+    // Compute scattering matrix for semi-infinite medium
+    // bool ref = true : Reflection side
+    // bool ref = false : Transmission side
 
     Matrix2cd Q, Omega, V, Vp, X, A, A_inv, B;
 
@@ -131,14 +178,20 @@ SMatrix s_inf(bool ref, double kx, double ky, dcomp kz, dcomp eps_r, Matrix2cd V
     return SM;
 }
 
-SMatrix s_layer(double k0, double kx, double ky, dcomp kz, dcomp eps_r, Matrix2cd& V_h, double L)
+SMatrix s_slayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, Layer* layer)
 {
-    // Compute scattering matrix for layer of finite size.
+    // Compute scattering matrix for layer of finite size
 
     Matrix2cd Q, Omega, V, Vp, X, A, A_inv, B, M, D, D_inv;
 
+    // Permittivity and normal wavevector in single layer
+    dcomp eps_r = pow(layer->single_p->N[wvl_index], 2);
+    dcomp kz = sqrt(eps_r - pow(kx, 2) - pow(ky, 2));
+
     Q << kx*ky, eps_r - pow(kx, 2),
          pow(ky, 2) - eps_r, -kx*ky;
+
+    double L = layer->single_p->thickness;
 
     Omega = 1i*kz*I;
     V = Q*Omega.inverse();
@@ -160,11 +213,43 @@ SMatrix s_layer(double k0, double kx, double ky, dcomp kz, dcomp eps_r, Matrix2c
     return SM;
 }
 
+SMatrix s_mlayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, Layer* layer)
+{
+    SMatrix SNew;
+    if (layer->type == Layer::multi)
+    {
+        SMatrix SUnit;
+        SUnit.S_11 = Z;
+        SUnit.S_12 = I;
+        SUnit.S_21 = I;
+        SUnit.S_22 = Z;
+
+        // Scattering matrix for unit cell of multilayer
+        for (int l=0; l<layer->multi_p->num_layers; l+=1)
+        {
+            SNew = s_mlayer(k0, kx, ky, V_h, wvl_index, layer->multi_p->unit_cell[l]);
+            SUnit = redheffer(SUnit, SNew);
+        }
+
+        // Scattering matrix for multilayer
+        for (int k=0; k<layer->multi_p->num_uc; k+=1)
+        {
+            SNew = redheffer(SNew, SUnit);
+        }
+    }
+    else
+    {
+        // Scattering matrix for single layer
+        SNew = s_slayer(k0, kx, ky, V_h, wvl_index, layer);
+    }
+    return SNew;
+}
+
 void R_T_coeffs(double pTE, double pTM, double theta, double phi,
                 double kx, double ky, dcomp kz_refl, dcomp kz_tran,
                 SMatrix SGlob, double& R, double& T)
 {
-    // Compute polarization vector of incident fields.
+    // Compute polarization vector of incident fields
     Vector3d k_inc(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta));
     Vector3d az(0, 0, 1), aTE, aTM, P;
 
@@ -184,100 +269,71 @@ void R_T_coeffs(double pTE, double pTM, double theta, double phi,
     P = pTE*aTE + pTM*aTM;
     P.normalize();
 
-    // Compute reflected and transmitted fields.
+    // Compute reflected and transmitted fields
     Vector2cd e_src(P(0), P(1)), e_refl, e_tran;
 
     e_refl = SGlob.S_11*e_src;
     e_tran = SGlob.S_21*e_src;
 
-    // Compute normal field components.
+    // Compute normal field components
     dcomp ez_refl = -(kx*e_refl(0) + ky*e_refl(1))/kz_refl;
     dcomp ez_tran = -(kx*e_tran(0) + ky*e_tran(1))/kz_tran;
 
     Vector3cd E_refl(e_refl(0), e_refl(1), ez_refl);
     Vector3cd E_tran(e_tran(0), e_tran(1), ez_tran);
 
-    // Compute reflectance and transmittance coefficients.
+    // Compute reflectance and transmittance coefficients
     R = E_refl.squaredNorm();
     T = (kz_tran/kz_refl).real() * E_tran.squaredNorm();
 }
 
-void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, dcomp* N_polar_p, int num_wvl,
-           double L_polar, double N_A, double N_B, double L_A, double L_B, int num_uc, double N_inc, double N_sub,
-           double* R, double* T)
+void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl,
+           Layer* multilayer, double N_inc, double N_sub, double* R, double* T)
 {
-    // Incident wave vector amplitude.
+    // Incident wave vector amplitude
     Map<ArrayXd> wvl(wvl_p, num_wvl);
     ArrayXd k0 = 2.0*M_PI/wvl;
 
-    // Transverse wave vectors.
+    // Transverse wave vectors
     double kx = N_inc*sin(M_PI*theta/180.0)*cos(M_PI*phi/180.0);
     double ky = N_inc*sin(M_PI*theta/180.0)*sin(M_PI*phi/180.0);
 
-    // Gap parameters.
     Matrix2cd V_h;
     V_h << kx*ky, 1.0 + ky*ky,
            -1.0 - kx*kx, -kx*ky;
     V_h = -1i*V_h;
 
-    // Normal wave vectors in incident medium and substrate.
+    // Permittivities and normal wavevectors in incident medium and substrate.
     dcomp eps_r_inc = pow(N_inc, 2);
     dcomp eps_r_sub = pow(N_sub, 2);
     dcomp kz_inc = sqrt(eps_r_inc - pow(kx, 2) - pow(ky, 2));
     dcomp kz_sub = sqrt(eps_r_sub - pow(kx, 2) - pow(ky, 2));
 
-    // Normal wave vector in polar material.
-    Map<ArrayXcd> N_polar(N_polar_p, num_wvl);
-    ArrayXcd eps_r_polar = N_polar.square();
-    ArrayXcd kz_polar = (eps_r_polar - pow(kx, 2) - pow(ky, 2)).sqrt();
+    // Scattering matrices
+    SMatrix SGlob, SRefl, STran, SMulti;
 
-    // Normal wave vector in Bragg reflector.
-    dcomp eps_r_A = pow(N_A, 2);
-    dcomp eps_r_B = pow(N_B, 2);
-    dcomp kz_A = sqrt(eps_r_A - pow(kx, 2) - pow(ky, 2));
-    dcomp kz_B = sqrt(eps_r_B - pow(kx, 2) - pow(ky, 2));
+    // Compute scattering matrix for reflection side
+    SRefl = s_inf(true, kx, ky, V_h, kz_inc, eps_r_inc);
 
-    // Scattering matrices.
-    SMatrix SGlob, SRefl, STran, SPolar, SBragg, SLayerA, SLayerB;
+    // Compute scattering matrix for transmission side
+    STran = s_inf(false, kx, ky, V_h, kz_sub, eps_r_sub);
 
-    // Compute scattering matrix for reflection side and
-    SRefl = s_inf(true, kx, ky, kz_inc, eps_r_inc, V_h);
-
-    // Compute scattering matrix for transmission side.
-    STran = s_inf(false, kx, ky, kz_sub, eps_r_sub, V_h);
-
-    // Loop through all wavelengths.
+    // Loop through all wavelengths
     for (int q=0; q<num_wvl; q++)
     {
-        // Start with scattering matrix on reflection side.
-        SGlob.S_11 = SRefl.S_11;
-        SGlob.S_12 = SRefl.S_12;
-        SGlob.S_21 = SRefl.S_21;
-        SGlob.S_22 = SRefl.S_22;
+        // Start with scattering matrix on reflection side
+        SGlob = SRefl;
 
-        // Compute scattering matrix for polar material and
-        // update global scattering matrix.
-        SPolar = s_layer(k0(q), kx, ky, kz_polar(q), eps_r_polar(q), V_h, L_polar);
-        SGlob = redheffer(SGlob, SPolar);
+        // Compute scattering matrix for multilayer and
+        // update global scattering matrix
+        SMulti = s_mlayer(k0(q), kx, ky, V_h, q, multilayer);
+        SGlob = redheffer(SGlob, SMulti);
 
-        // Compute scattering matrix for unit cell of Bragg reflector and
-        // update global scattering matrix.
-        SLayerA = s_layer(k0(q), kx, ky, kz_A, eps_r_A, V_h, L_A);
-        SLayerB = s_layer(k0(q), kx, ky, kz_B, eps_r_B, V_h, L_B);
-        SBragg = redheffer(SLayerA, SLayerB);
-
-        // Loop through all unit cells.
-        for (int p=0; p<num_uc; p++)
-        {
-            // Update global scattering matrix using Redheffer star product.
-            SGlob = redheffer(SGlob, SBragg);
-        }
-
-        // Finish by multiplying global scattering matrix by scattering matrix
-        // on transmission side using Redheffer star product.
+        // Multiply global scattering matrix by scattering matrix
+        // on transmission side using Redheffer star product
         SGlob = redheffer(SGlob, STran);
 
-        // Compute reflection and transmission coefficients.
+        // Compute reflection and transmission coefficients
         R_T_coeffs(pTE, pTM, theta, phi, kx, ky, kz_inc, kz_sub, SGlob, R[q], T[q]);
 
         //std::cout << SGlob.S_11 << std::endl;

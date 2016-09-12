@@ -36,6 +36,9 @@ class Fields(object):
         phi     : Angle of incidence on surface plane (degrees)
         """
         self.wvl = wvl.astype(np.double)
+        self.wvl_p = c_void_p(self.wvl.ctypes.data)
+        self.num_wvl = c_int(len(self.wvl))
+
         self.pTE = c_double(pTE)
         self.pTM = c_double(pTM)
         self.theta = c_double(theta)
@@ -56,7 +59,7 @@ class SingleLayerNoDisp(object):
         self.N = n*np.ones(len(self.wvl), dtype=np.complex)
         self.d = c_double(d)
         self.num_wvl = c_int(len(self.wvl))
-        self.layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
+        self.c_layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
 
 
 class SingleLayerDisp(object):
@@ -75,8 +78,7 @@ class SingleLayerDisp(object):
         self.generate_N_for_wvl(wvl)
         self.d = c_double(d)
         self.num_wvl = c_int(len(self.wvl))
-        self.layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
-        #lib.PrintWvl(self.layer)
+        self.c_layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
 
     def generate_N_for_wvl(self, wvl):
         """Interpolate refractive index for new wavelength array using cubic splines"""
@@ -91,29 +93,33 @@ class SingleLayerDisp(object):
 
 class MultiLayer(object):
 
-    """Multilayer made of a polar or simple material layers
+    """Multilayer made of single layers or other multilayers
     """
 
     def __init__(self):
 
         self.unit_cell = []           # List of layers in unit cell
         self.num_uc = c_int(1)        # Number of repetitions of unit cell
+        self.c_layer = lib.NewMultiLayer()
 
     def add_to_unit_cell(self, *layers):
         """Add a layer to unit cell
         """
         for layer in layers:
             self.unit_cell.append(layer)
+            lib.AddToUnitCell(self.c_layer, layer.c_layer)
 
     def clear_unit_cell(self):
         """Remove all layers from unit cell
         """
         del self.unit_cell[:]
+        lib.ClearUnitCell(self.c_layer)
 
-    def number_repetitions(self, num):
+    def set_num_repetitions(self, num):
         """Define number of repetitons of unit cell
         """
         self.num_uc.value = num
+        lib.SetNumRepetitions(self.c_layer, num)
 
 
 class ScatteringMatrix(object):
@@ -129,52 +135,15 @@ class ScatteringMatrix(object):
         self.N_inc = c_double(N_inc)  # Refractive index of medium of incidence
         self.N_sub = c_double(N_sub)  # Refractive index of substrate
 
-        # Make a list of all single layers
-        #self.single_layers = self.find_single_layers(self.ml)
-
-        # Find most effective layer order for computation
-        #self.steps = []  # Each element is a step of computation
-        #self.steps.append(self.single_layers)  # First step is the single layers
-        #self.uc_hierarchy = self.order_layers(self.ml, self.single_layers)
-        #self.uc = self.find_unit_cells(self.ml)
-
-        # Create pointers to pass arrays to cpp library
-        #self.wvl_p = c_void_p(self.wvl.ctypes.data)
-        #self.N_polar_p = c_void_p(self.N_polar.ctypes.data)
-
-    def find_single_layers(self, multilayer):
-        """Find all single layers in multilayer"""
-        single_layers = []
-        for layer in multilayer.unit_cell:
-            name = type(layer).__name__
-            if name == "SimpleLayer" or name == "PolarLayer":
-                if layer not in single_layers:
-                    single_layers.append(layer)
-            else:
-                single_layers.extend(self.find_single_layers(layer))
-        return single_layers
-
-    def find_unit_cells(self, multilayer):
-        """Find set of all unit cells to compute."""
-        unit_cells = [multilayer]
-        for layer in multilayer.unit_cell:
-            if layer not in unit_cells:
-                unit_cells.append(unit_cells)
-            if type(layer).__name__ == "MultiLayer":
-                unit_cells.extend(self.find_unit_cells(layer))
-        return unit_cells
-
     def solve(self):
         """Solve scattering matrix problem to get reflection and
            transmission coefficients of multilayer
         """
-        self.R = np.zeros(self.ml.num_wvl.value, dtype=np.double)
-        self.T = np.zeros(self.ml.num_wvl.value, dtype=np.double)
+        self.R = np.zeros(self.fd.num_wvl.value, dtype=np.double)
+        self.T = np.zeros(self.fd.num_wvl.value, dtype=np.double)
         self.R_p = c_void_p(self.R.ctypes.data)
         self.T_p = c_void_p(self.T.ctypes.data)
 
         lib.solve(self.fd.pTE, self.fd.pTM, self.fd.theta, self.fd.phi,
-                  self.ml.wvl_p, self.ml.N_polar_p, self.ml.num_wvl,
-                  self.ml.L_polar, self.ml.N_A, self.ml.N_B, self.ml.L_A,
-                  self.ml.L_B, self.ml.num_uc, self.ml.N_inc, self.ml.N_sub,
-                  self.R_p, self.T_p)
+                  self.fd.wvl_p, self.fd.num_wvl, self.ml.c_layer,
+                  self.N_inc, self.N_sub, self.R_p, self.T_p)
