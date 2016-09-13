@@ -43,6 +43,7 @@ class Fields(object):
         self.pTM = c_double(pTM)
         self.theta = c_double(theta)
         self.phi = c_double(phi)
+        self.c_fields = lib.NewFields(self.pTE, self.pTM, self.theta, self.phi, self.wvl_p, self.num_wvl)
 
 
 class SingleLayerNoDisp(object):
@@ -144,6 +145,4 @@ class ScatteringMatrix(object):
         self.R_p = c_void_p(self.R.ctypes.data)
         self.T_p = c_void_p(self.T.ctypes.data)
 
-        lib.solve(self.fd.pTE, self.fd.pTM, self.fd.theta, self.fd.phi,
-                  self.fd.wvl_p, self.fd.num_wvl, self.ml.c_layer,
-                  self.N_inc, self.N_sub, self.R_p, self.T_p)
+        lib.solve(self.fd.c_fields, self.ml.c_layer, self.N_inc, self.N_sub, self.R_p, self.T_p)

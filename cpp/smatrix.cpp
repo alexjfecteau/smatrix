@@ -9,21 +9,23 @@
 #include <Eigen/Dense>
 #include <unsupported/Eigen/MatrixFunctions>
 
-using Eigen::Matrix2cd;
-using Eigen::Vector3d;
-using Eigen::Vector3cd;
-using Eigen::Vector2cd;
-using Eigen::ArrayXd;
-using Eigen::ArrayXcd;
-using Eigen::Array2d;
-using Eigen::Array2cd;
-using Eigen::Map;
+using namespace Eigen;
 using namespace std::complex_literals;
 
 typedef std::complex<double> dcomp;
 
 Matrix2cd I = Matrix2cd::Identity();
 Matrix2cd Z = Matrix2cd::Zero();
+
+class Fields
+{
+public:
+    double pTE, pTM, theta, phi;
+    double* wvl_p;
+    int num_wvl;
+    Fields(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl):
+    pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl_p(wvl_p), num_wvl(num_wvl) {}
+};
 
 class Layer;
 
@@ -32,9 +34,10 @@ class SingleLayer
 public:
     Map<ArrayXd> wvl;
     Map<ArrayXcd> N;
-    const double thickness;
-    const int size_array;
-    SingleLayer(double* wvl_p, dcomp* N_p, int size, double d) : wvl(wvl_p, size), N(N_p, size), size_array(size), thickness(d) {}
+    double thickness;
+    int size_array;
+    SingleLayer(double* wvl_p, dcomp* N_p, int size, double d):
+    wvl(wvl_p, size), N(N_p, size), size_array(size), thickness(d) {}
 };
 
 class MultiLayer
@@ -75,7 +78,14 @@ public:
 
 extern "C" {
 
-// Functions for SingleLayer class
+// Fields class
+DLLEXPORT Fields* NewFields(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl)
+    {
+        Fields* fields_p = new Fields(pTE, pTM, theta, phi, wvl_p, num_wvl);
+        return fields_p;
+    }
+
+// SingleLayer class
 DLLEXPORT Layer* NewSingleLayer(double* wvl_p, dcomp* N_p, int size, double d)
     {
         SingleLayer* single_p = new SingleLayer(wvl_p, N_p, size, d);
@@ -86,7 +96,7 @@ DLLEXPORT Layer* NewSingleLayer(double* wvl_p, dcomp* N_p, int size, double d)
 
 // TODO : Function to destroy instances of SingleLayer
 
-// Functions for MultiLayer class
+// MultiLayer class
 DLLEXPORT Layer* NewMultiLayer()
     {
         MultiLayer* multi_p = new MultiLayer();
@@ -110,8 +120,7 @@ DLLEXPORT void SetNumRepetitions(Layer* multilayer, int n)
         multilayer->multi_p->set_num_repetitions(n);
     }
 
-DLLEXPORT void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl,
-                     Layer* multilayer, double N_inc, double N_sub, double* R, double* T);
+DLLEXPORT void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double* R, double* T);
 }
 
 class SMatrix
@@ -245,15 +254,14 @@ SMatrix s_mlayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, 
     return SNew;
 }
 
-void R_T_coeffs(double pTE, double pTM, double theta, double phi,
-                double kx, double ky, dcomp kz_refl, dcomp kz_tran,
+void R_T_coeffs(Fields* fields, double kx, double ky, dcomp kz_refl, dcomp kz_tran,
                 SMatrix SGlob, double& R, double& T)
 {
     // Compute polarization vector of incident fields
-    Vector3d k_inc(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta));
+    Vector3d k_inc(sin(fields->theta)*cos(fields->phi), sin(fields->theta)*sin(fields->phi), cos(fields->theta));
     Vector3d az(0, 0, 1), aTE, aTM, P;
 
-    if (theta == 0)
+    if (fields->theta == 0)
     {
         aTE << 0, 1, 0;
     }
@@ -266,7 +274,7 @@ void R_T_coeffs(double pTE, double pTM, double theta, double phi,
     aTM = aTE.cross(k_inc);
     aTM.normalize();
 
-    P = pTE*aTE + pTM*aTM;
+    P = fields->pTE*aTE + fields->pTM*aTM;
     P.normalize();
 
     // Compute reflected and transmitted fields
@@ -287,16 +295,15 @@ void R_T_coeffs(double pTE, double pTM, double theta, double phi,
     T = (kz_tran/kz_refl).real() * E_tran.squaredNorm();
 }
 
-void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl,
-           Layer* multilayer, double N_inc, double N_sub, double* R, double* T)
+void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double* R, double* T)
 {
     // Incident wave vector amplitude
-    Map<ArrayXd> wvl(wvl_p, num_wvl);
+    Map<ArrayXd> wvl(fields->wvl_p, fields->num_wvl);
     ArrayXd k0 = 2.0*M_PI/wvl;
 
     // Transverse wave vectors
-    double kx = N_inc*sin(M_PI*theta/180.0)*cos(M_PI*phi/180.0);
-    double ky = N_inc*sin(M_PI*theta/180.0)*sin(M_PI*phi/180.0);
+    double kx = N_inc*sin(M_PI*fields->theta/180.0)*cos(M_PI*fields->phi/180.0);
+    double ky = N_inc*sin(M_PI*fields->theta/180.0)*sin(M_PI*fields->phi/180.0);
 
     Matrix2cd V_h;
     V_h << kx*ky, 1.0 + ky*ky,
@@ -319,14 +326,14 @@ void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, int 
     STran = s_inf(false, kx, ky, V_h, kz_sub, eps_r_sub);
 
     // Loop through all wavelengths
-    for (int q=0; q<num_wvl; q++)
+    for (int q=0; q<fields->num_wvl; q++)
     {
         // Start with scattering matrix on reflection side
         SGlob = SRefl;
 
         // Compute scattering matrix for multilayer and
         // update global scattering matrix
-        SMulti = s_mlayer(k0(q), kx, ky, V_h, q, multilayer);
+        SMulti = s_mlayer(k0[q], kx, ky, V_h, q, multilayer);
         SGlob = redheffer(SGlob, SMulti);
 
         // Multiply global scattering matrix by scattering matrix
@@ -334,7 +341,7 @@ void solve(double pTE, double pTM, double theta, double phi, double* wvl_p, int 
         SGlob = redheffer(SGlob, STran);
 
         // Compute reflection and transmission coefficients
-        R_T_coeffs(pTE, pTM, theta, phi, kx, ky, kz_inc, kz_sub, SGlob, R[q], T[q]);
+        R_T_coeffs(fields, kx, ky, kz_inc, kz_sub, SGlob, R[q], T[q]);
 
         //std::cout << SGlob.S_11 << std::endl;
         //std::cout << SGlob.S_12 << std::endl;

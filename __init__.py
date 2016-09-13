@@ -10,3 +10,4 @@ from .scattering_matrix import SingleLayerDisp
 from .scattering_matrix import MultiLayer
 from .scattering_matrix import Fields
 from .scattering_matrix import ScatteringMatrix
+from .scattering_matrix import close_session
