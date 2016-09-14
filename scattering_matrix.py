@@ -76,7 +76,10 @@ class SingleLayerDisp(object):
         self.wvl_disp = wvl_disp.astype(np.double)
         self.N_disp = N_disp.astype(np.complex)
 
+        self.wvl = wvl_disp
+        self.N = self.N_disp
         self.generate_N_for_wvl(wvl)
+
         self.d = c_double(d)
         self.num_wvl = c_int(len(self.wvl))
         self.c_layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
