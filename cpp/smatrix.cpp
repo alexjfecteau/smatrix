@@ -127,10 +127,10 @@ class SMatrix
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    Matrix2cd S_11;
-    Matrix2cd S_12;
-    Matrix2cd S_21;
-    Matrix2cd S_22;
+    Matrix2cd S_11 = Z;
+    Matrix2cd S_12 = I;
+    Matrix2cd S_21 = I;
+    Matrix2cd S_22 = Z;
 };
 
 SMatrix redheffer(SMatrix SA, SMatrix SB)
@@ -224,34 +224,28 @@ SMatrix s_slayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, 
 
 SMatrix s_mlayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, Layer* layer)
 {
-    SMatrix SNew;
+    SMatrix SLayer, SUnit, STot;
     if (layer->type == Layer::multi)
     {
-        SMatrix SUnit;
-        SUnit.S_11 = Z;
-        SUnit.S_12 = I;
-        SUnit.S_21 = I;
-        SUnit.S_22 = Z;
-
         // Scattering matrix for unit cell of multilayer
         for (int l=0; l<layer->multi_p->num_layers; l+=1)
         {
-            SNew = s_mlayer(k0, kx, ky, V_h, wvl_index, layer->multi_p->unit_cell[l]);
-            SUnit = redheffer(SUnit, SNew);
+            SLayer = s_mlayer(k0, kx, ky, V_h, wvl_index, layer->multi_p->unit_cell[l]);
+            SUnit = redheffer(SUnit, SLayer);
         }
 
         // Scattering matrix for multilayer
         for (int k=0; k<layer->multi_p->num_uc; k+=1)
         {
-            SNew = redheffer(SNew, SUnit);
+            STot = redheffer(STot, SUnit);
         }
     }
     else
     {
         // Scattering matrix for single layer
-        SNew = s_slayer(k0, kx, ky, V_h, wvl_index, layer);
+        STot = s_slayer(k0, kx, ky, V_h, wvl_index, layer);
     }
-    return SNew;
+    return STot;
 }
 
 void R_T_coeffs(Fields* fields, double kx, double ky, dcomp kz_refl, dcomp kz_tran,
