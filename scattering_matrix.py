@@ -97,11 +97,12 @@ class MultiLayer(object):
     """Multilayer made of single layers or other multilayers
     """
 
-    def __init__(self):
+    def __init__(self, *layers):
 
         self.unit_cell = []           # List of layers in unit cell
         self.num_uc = c_int(1)        # Number of repetitions of unit cell
         self.c_layer = lib.NewMultiLayer()
+        self.add_to_unit_cell(*layers)
 
     def add_to_unit_cell(self, *layers):
         """Add a layer to unit cell
