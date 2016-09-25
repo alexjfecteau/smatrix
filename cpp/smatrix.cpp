@@ -20,11 +20,12 @@ Matrix2cd Z = Matrix2cd::Zero();
 class Fields
 {
 public:
+    // Angles are converted to radians in constructor
     double pTE, pTM, theta, phi;
     double* wvl_p;
     int num_wvl;
     Fields(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl):
-    pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl_p(wvl_p), num_wvl(num_wvl) {}
+    pTE(pTE), pTM(pTM), theta(M_PI*theta/180), phi(M_PI*phi/180), wvl_p(wvl_p), num_wvl(num_wvl) {}
 };
 
 class Layer;
@@ -296,8 +297,8 @@ void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double
     ArrayXd k0 = 2.0*M_PI/wvl;
 
     // Transverse wave vectors
-    double kx = N_inc*sin(M_PI*fields->theta/180.0)*cos(M_PI*fields->phi/180.0);
-    double ky = N_inc*sin(M_PI*fields->theta/180.0)*sin(M_PI*fields->phi/180.0);
+    double kx = N_inc*sin(fields->theta)*cos(fields->phi);
+    double ky = N_inc*sin(fields->theta)*sin(fields->phi);
 
     Matrix2cd V_h;
     V_h << kx*ky, 1.0 + ky*ky,
