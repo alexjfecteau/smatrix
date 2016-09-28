@@ -194,7 +194,7 @@ SMatrix s_slayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, 
 
     Matrix2cd Q, Omega, V, Vp, X, A, A_inv, B, M, D, D_inv;
 
-    // Permittivity and normal wavevector in single layer
+    // Permittivity and longitudinal wavevector in single layer
     dcomp eps_r = pow(layer->single_p->N[wvl_index], 2);
     dcomp kz = sqrt(eps_r - pow(kx, 2) - pow(ky, 2));
 
@@ -249,8 +249,8 @@ SMatrix s_mlayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, 
     return STot;
 }
 
-void R_T_coeffs(Fields* fields, double kx, double ky, dcomp kz_refl, dcomp kz_tran,
-                SMatrix SGlob, double& R, double& T)
+void get_E_r_t(Fields* fields, double kx, double ky, dcomp kz_refl, dcomp kz_tran,
+               SMatrix SGlob, Vector3cd& E_refl, Vector3cd& E_tran)
 {
     // Compute polarization vector of incident fields
     Vector3d k_inc(sin(fields->theta)*cos(fields->phi), sin(fields->theta)*sin(fields->phi), cos(fields->theta));
@@ -278,16 +278,13 @@ void R_T_coeffs(Fields* fields, double kx, double ky, dcomp kz_refl, dcomp kz_tr
     e_refl = SGlob.S_11*e_src;
     e_tran = SGlob.S_21*e_src;
 
-    // Compute normal field components
+    // Compute longitudinal field components
     dcomp ez_refl = -(kx*e_refl(0) + ky*e_refl(1))/kz_refl;
     dcomp ez_tran = -(kx*e_tran(0) + ky*e_tran(1))/kz_tran;
 
-    Vector3cd E_refl(e_refl(0), e_refl(1), ez_refl);
-    Vector3cd E_tran(e_tran(0), e_tran(1), ez_tran);
-
-    // Compute reflectance and transmittance coefficients
-    R = E_refl.squaredNorm();
-    T = (kz_tran/kz_refl).real() * E_tran.squaredNorm();
+    // Update reflected and transmitted vectors
+    E_refl << e_refl(0), e_refl(1), ez_refl;
+    E_tran << e_tran(0), e_tran(1), ez_tran;
 }
 
 void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double* R, double* T)
@@ -305,7 +302,7 @@ void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double
            -1.0 - kx*kx, -kx*ky;
     V_h = -1i*V_h;
 
-    // Permittivities and normal wavevectors in incident medium and substrate.
+    // Permittivities and longitudinal wavevectors in incident medium and substrate.
     dcomp eps_r_inc = pow(N_inc, 2);
     dcomp eps_r_sub = pow(N_sub, 2);
     dcomp kz_inc = sqrt(eps_r_inc - pow(kx, 2) - pow(ky, 2));
@@ -314,20 +311,20 @@ void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double
     // Scattering matrices
     SMatrix SGlob, SRefl, STran, SMulti;
 
-    // Compute scattering matrix for reflection side
+    // Scattering matrix for reflection side
     SRefl = s_inf(true, kx, ky, V_h, kz_inc, eps_r_inc);
 
-    // Compute scattering matrix for transmission side
+    // Scattering matrix for transmission side
     STran = s_inf(false, kx, ky, V_h, kz_sub, eps_r_sub);
 
     // Loop through all wavelengths
     for (int q=0; q<fields->num_wvl; q++)
     {
-        // Start with scattering matrix on reflection side
+        // Scattering matrix on reflection side
         SGlob = SRefl;
 
-        // Compute scattering matrix for multilayer and
-        // update global scattering matrix
+        // Multiply global scattering matrix by scattering matrix
+        // of multilayer using Redheffer star product
         SMulti = s_mlayer(k0[q], kx, ky, V_h, q, multilayer);
         SGlob = redheffer(SGlob, SMulti);
 
@@ -335,13 +332,12 @@ void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double
         // on transmission side using Redheffer star product
         SGlob = redheffer(SGlob, STran);
 
-        // Compute reflection and transmission coefficients
-        R_T_coeffs(fields, kx, ky, kz_inc, kz_sub, SGlob, R[q], T[q]);
+        // Compute reflected and transmitted electric fields
+        Vector3cd E_refl, E_tran;
+        get_E_r_t(fields, kx, ky, kz_inc, kz_sub, SGlob, E_refl, E_tran);
 
-        //std::cout << SGlob.S_11 << std::endl;
-        //std::cout << SGlob.S_12 << std::endl;
-        //std::cout << SGlob.S_21 << std::endl;
-        //std::cout << SGlob.S_22 << std::endl;
-        //std::cin.get();
+        // Compute reflection and transmission coefficients
+        R[q] = E_refl.squaredNorm();
+        T[q] = (kz_sub/kz_inc).real() * E_tran.squaredNorm();
     }
 }
