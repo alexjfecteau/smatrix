@@ -17,16 +17,143 @@ typedef std::complex<double> dcomp;
 Matrix2cd I = Matrix2cd::Identity();
 Matrix2cd Z = Matrix2cd::Zero();
 
+class SMatrix
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    Matrix2cd S_11 = Z;
+    Matrix2cd S_12 = I;
+    Matrix2cd S_21 = I;
+    Matrix2cd S_22 = Z;
+};
+
 class Fields
 {
 public:
-    // Angles are converted to radians in constructor
-    double pTE, pTM, theta, phi;
-    double* wvl_p;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    double pTE, pTM, theta, phi, kx, ky, N_inc, N_sub;
+    dcomp eps_r_inc, eps_r_sub, kz_inc, kz_sub;
+    Map<ArrayXd> wvl;
     int num_wvl;
-    Fields(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl):
-    pTE(pTE), pTM(pTM), theta(M_PI*theta/180), phi(M_PI*phi/180), wvl_p(wvl_p), num_wvl(num_wvl) {}
+    ArrayXd k0;
+    Matrix2cd V_h;
+    Vector3cd E_refl, E_tran;
+    Fields(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl, double N_inc, double N_sub):
+    pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl(wvl_p, num_wvl), num_wvl(num_wvl), N_inc(N_inc), N_sub(N_sub)
+    {
+        // Convert angles to radians
+        theta = M_PI*theta/180;
+        phi = M_PI*phi/180;
+
+        // Incident wave vector amplitude
+        k0 = 2.0*M_PI/wvl;
+
+        // Transverse wave vectors
+        kx = N_inc*sin(theta)*cos(phi);
+        ky = N_inc*sin(theta)*sin(phi);
+
+        V_h << kx*ky, 1.0 + ky*ky,
+               -1.0 - kx*kx, -kx*ky;
+        V_h = -1i*V_h;
+
+        // Permittivities and longitudinal wavevectors in incident medium and substrate
+        eps_r_inc = pow(N_inc, 2);
+        eps_r_sub = pow(N_sub, 2);
+        kz_inc = sqrt(eps_r_inc - pow(kx, 2) - pow(ky, 2));
+        kz_sub = sqrt(eps_r_sub - pow(kx, 2) - pow(ky, 2));
+    }
+    void E_refl_tran(SMatrix SGlob);
+    SMatrix s_refl();
+    SMatrix s_tran();
 };
+
+void Fields::E_refl_tran(SMatrix SGlob)
+{
+    // Compute polarization vector of incident fields
+    Vector3d k_inc(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta));
+    Vector3d az(0, 0, 1), aTE, aTM, P;
+
+    if (theta == 0)
+    {
+        aTE << 0, 1, 0;
+    }
+    else
+    {
+        aTE = az.cross(k_inc);
+        aTE.normalize();
+    }
+
+    aTM = aTE.cross(k_inc);
+    aTM.normalize();
+
+    P = pTE*aTE + pTM*aTM;
+    P.normalize();
+
+    // Compute reflected and transmitted fields
+    Vector2cd e_src(P(0), P(1)), e_refl, e_tran;
+
+    e_refl = SGlob.S_11*e_src;
+    e_tran = SGlob.S_21*e_src;
+
+    // Compute longitudinal field components
+    dcomp ez_refl = -(kx*e_refl(0) + ky*e_refl(1))/kz_inc;
+    dcomp ez_tran = -(kx*e_tran(0) + ky*e_tran(1))/kz_sub;
+
+    // Update reflected and transmitted fields
+    E_refl << e_refl(0), e_refl(1), ez_refl;
+    E_tran << e_tran(0), e_tran(1), ez_tran;
+}
+
+SMatrix Fields::s_refl()
+{
+    // Compute scattering matrix for semi-infinite medium on reflection side
+
+    Matrix2cd Q, Omega, V, Vp, X, A, A_inv, B;
+
+    Q << kx*ky, eps_r_inc - pow(kx, 2),
+         pow(ky, 2) - eps_r_inc, -kx*ky;
+
+    Omega = 1i*kz_inc*I;
+    V = Q*Omega.inverse();
+    Vp = V_h.inverse()*V;
+    A = I + Vp;
+    B = I - Vp;
+    A_inv = A.inverse();
+
+    SMatrix SM;
+    SM.S_11 = -A_inv*B;
+    SM.S_12 = 2*A_inv;
+    SM.S_21 = 0.5*(A - B*A_inv*B);
+    SM.S_22 = B*A_inv;
+
+    return SM;
+}
+
+SMatrix Fields::s_tran()
+{
+    // Compute scattering matrix for semi-infinite medium on transmission side
+
+    Matrix2cd Q, Omega, V, Vp, X, A, A_inv, B;
+
+    Q << kx*ky, eps_r_sub - pow(kx, 2),
+         pow(ky, 2) - eps_r_sub, -kx*ky;
+
+    Omega = 1i*kz_sub*I;
+    V = Q*Omega.inverse();
+    Vp = V_h.inverse()*V;
+    A = I + Vp;
+    B = I - Vp;
+    A_inv = A.inverse();
+
+    SMatrix SM;
+    SM.S_11 = B*A_inv;
+    SM.S_12 = 0.5*(A - B*A_inv*B);
+    SM.S_21 = 2*A_inv;
+    SM.S_22 = -A_inv*B;
+
+    return SM;
+}
+
 
 class Layer;
 
@@ -37,6 +164,8 @@ public:
     Map<ArrayXcd> N;
     double thickness;
     int size_array;
+    Matrix2cd V;
+    SMatrix S;
     SingleLayer(double* wvl_p, dcomp* N_p, int size, double d):
     wvl(wvl_p, size), N(N_p, size), size_array(size), thickness(d) {}
 };
@@ -80,9 +209,9 @@ public:
 extern "C" {
 
 // Fields class
-DLLEXPORT Fields* NewFields(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl)
+DLLEXPORT Fields* NewFields(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl, double N_inc, double N_sub)
     {
-        Fields* fields_p = new Fields(pTE, pTM, theta, phi, wvl_p, num_wvl);
+        Fields* fields_p = new Fields(pTE, pTM, theta, phi, wvl_p, num_wvl, N_inc, N_sub);
         return fields_p;
     }
 
@@ -121,18 +250,8 @@ DLLEXPORT void SetNumRepetitions(Layer* multilayer, int n)
         multilayer->multi_p->set_num_repetitions(n);
     }
 
-DLLEXPORT void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double* R, double* T);
+DLLEXPORT void solve(Fields* fields, Layer* multilayer, double* R, double* T);
 }
-
-class SMatrix
-{
-public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    Matrix2cd S_11 = Z;
-    Matrix2cd S_12 = I;
-    Matrix2cd S_21 = I;
-    Matrix2cd S_22 = Z;
-};
 
 SMatrix redheffer(SMatrix SA, SMatrix SB)
 {
@@ -150,45 +269,7 @@ SMatrix redheffer(SMatrix SA, SMatrix SB)
     return SAB;
 }
 
-SMatrix s_inf(bool ref, double kx, double ky, Matrix2cd V_h, dcomp kz, dcomp eps_r)
-{
-    // Compute scattering matrix for semi-infinite medium
-    // bool ref = true : Reflection side
-    // bool ref = false : Transmission side
-
-    Matrix2cd Q, Omega, V, Vp, X, A, A_inv, B;
-
-    Q << kx*ky, eps_r - pow(kx, 2),
-         pow(ky, 2) - eps_r, -kx*ky;
-
-    Omega = 1i*kz*I;
-    V = Q*Omega.inverse();
-    Vp = V_h.inverse()*V;
-    A = I + Vp;
-    B = I - Vp;
-    A_inv = A.inverse();
-
-    SMatrix SM;
-
-    if (ref)
-    {
-        SM.S_11 = -A_inv*B;
-        SM.S_12 = 2*A_inv;
-        SM.S_21 = 0.5*(A - B*A_inv*B);
-        SM.S_22 = B*A_inv;
-    }
-    else
-    {
-        SM.S_11 = B*A_inv;
-        SM.S_12 = 0.5*(A - B*A_inv*B);
-        SM.S_21 = 2*A_inv;
-        SM.S_22 = -A_inv*B;
-    }
-
-    return SM;
-}
-
-SMatrix s_slayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, Layer* layer)
+SMatrix s_slayer(Fields* fields, Layer* layer, int wvl_index)
 {
     // Compute scattering matrix for layer of finite size
 
@@ -196,17 +277,17 @@ SMatrix s_slayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, 
 
     // Permittivity and longitudinal wavevector in single layer
     dcomp eps_r = pow(layer->single_p->N[wvl_index], 2);
-    dcomp kz = sqrt(eps_r - pow(kx, 2) - pow(ky, 2));
+    dcomp kz = sqrt(eps_r - pow(fields->kx, 2) - pow(fields->ky, 2));
 
-    Q << kx*ky, eps_r - pow(kx, 2),
-         pow(ky, 2) - eps_r, -kx*ky;
+    Q << fields->kx*fields->ky, eps_r - pow(fields->kx, 2),
+         pow(fields->ky, 2) - eps_r, -fields->kx*fields->ky;
 
     double L = layer->single_p->thickness;
 
     Omega = 1i*kz*I;
     V = Q*Omega.inverse();
-    X = (k0*L*Omega).exp();
-    Vp = V.inverse()*V_h;
+    X = (fields->k0[wvl_index]*L*Omega).exp();
+    Vp = V.inverse()*fields->V_h;
     A = I + Vp;
     B = I - Vp;
     A_inv = A.inverse();
@@ -220,10 +301,14 @@ SMatrix s_slayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, 
     SM.S_12 = D_inv*X*(A - B*A_inv*B);
     SM.S_21 = SM.S_12;
 
+    // Save V and S matrices for further use
+    layer->single_p->V = V;
+    layer->single_p->S = SM;
+
     return SM;
 }
 
-SMatrix s_mlayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, Layer* layer)
+SMatrix s_mlayer(Fields* fields, Layer* layer, int wvl_index)
 {
     SMatrix SLayer, SUnit, STot;
     if (layer->type == Layer::multi)
@@ -231,7 +316,7 @@ SMatrix s_mlayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, 
         // Scattering matrix for unit cell of multilayer
         for (int l=0; l<layer->multi_p->num_layers; l+=1)
         {
-            SLayer = s_mlayer(k0, kx, ky, V_h, wvl_index, layer->multi_p->unit_cell[l]);
+            SLayer = s_mlayer(fields, layer->multi_p->unit_cell[l], wvl_index);
             SUnit = redheffer(SUnit, SLayer);
         }
 
@@ -244,78 +329,21 @@ SMatrix s_mlayer(double k0, double kx, double ky, Matrix2cd V_h, int wvl_index, 
     else
     {
         // Scattering matrix for single layer
-        STot = s_slayer(k0, kx, ky, V_h, wvl_index, layer);
+        STot = s_slayer(fields, layer, wvl_index);
     }
     return STot;
 }
 
-void get_E_r_t(Fields* fields, double kx, double ky, dcomp kz_refl, dcomp kz_tran,
-               SMatrix SGlob, Vector3cd& E_refl, Vector3cd& E_tran)
+void solve(Fields* fields, Layer* multilayer, double* R, double* T)
 {
-    // Compute polarization vector of incident fields
-    Vector3d k_inc(sin(fields->theta)*cos(fields->phi), sin(fields->theta)*sin(fields->phi), cos(fields->theta));
-    Vector3d az(0, 0, 1), aTE, aTM, P;
-
-    if (fields->theta == 0)
-    {
-        aTE << 0, 1, 0;
-    }
-    else
-    {
-        aTE = az.cross(k_inc);
-        aTE.normalize();
-    }
-
-    aTM = aTE.cross(k_inc);
-    aTM.normalize();
-
-    P = fields->pTE*aTE + fields->pTM*aTM;
-    P.normalize();
-
-    // Compute reflected and transmitted fields
-    Vector2cd e_src(P(0), P(1)), e_refl, e_tran;
-
-    e_refl = SGlob.S_11*e_src;
-    e_tran = SGlob.S_21*e_src;
-
-    // Compute longitudinal field components
-    dcomp ez_refl = -(kx*e_refl(0) + ky*e_refl(1))/kz_refl;
-    dcomp ez_tran = -(kx*e_tran(0) + ky*e_tran(1))/kz_tran;
-
-    // Update reflected and transmitted vectors
-    E_refl << e_refl(0), e_refl(1), ez_refl;
-    E_tran << e_tran(0), e_tran(1), ez_tran;
-}
-
-void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double* R, double* T)
-{
-    // Incident wave vector amplitude
-    Map<ArrayXd> wvl(fields->wvl_p, fields->num_wvl);
-    ArrayXd k0 = 2.0*M_PI/wvl;
-
-    // Transverse wave vectors
-    double kx = N_inc*sin(fields->theta)*cos(fields->phi);
-    double ky = N_inc*sin(fields->theta)*sin(fields->phi);
-
-    Matrix2cd V_h;
-    V_h << kx*ky, 1.0 + ky*ky,
-           -1.0 - kx*kx, -kx*ky;
-    V_h = -1i*V_h;
-
-    // Permittivities and longitudinal wavevectors in incident medium and substrate.
-    dcomp eps_r_inc = pow(N_inc, 2);
-    dcomp eps_r_sub = pow(N_sub, 2);
-    dcomp kz_inc = sqrt(eps_r_inc - pow(kx, 2) - pow(ky, 2));
-    dcomp kz_sub = sqrt(eps_r_sub - pow(kx, 2) - pow(ky, 2));
-
     // Scattering matrices
     SMatrix SGlob, SRefl, STran, SMulti;
 
     // Scattering matrix for reflection side
-    SRefl = s_inf(true, kx, ky, V_h, kz_inc, eps_r_inc);
+    SRefl = fields->s_refl();
 
     // Scattering matrix for transmission side
-    STran = s_inf(false, kx, ky, V_h, kz_sub, eps_r_sub);
+    STran = fields->s_tran();
 
     // Loop through all wavelengths
     for (int q=0; q<fields->num_wvl; q++)
@@ -325,7 +353,7 @@ void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double
 
         // Multiply global scattering matrix by scattering matrix
         // of multilayer using Redheffer star product
-        SMulti = s_mlayer(k0[q], kx, ky, V_h, q, multilayer);
+        SMulti = s_mlayer(fields, multilayer, q);
         SGlob = redheffer(SGlob, SMulti);
 
         // Multiply global scattering matrix by scattering matrix
@@ -333,11 +361,10 @@ void solve(Fields* fields, Layer* multilayer, double N_inc, double N_sub, double
         SGlob = redheffer(SGlob, STran);
 
         // Compute reflected and transmitted electric fields
-        Vector3cd E_refl, E_tran;
-        get_E_r_t(fields, kx, ky, kz_inc, kz_sub, SGlob, E_refl, E_tran);
+        fields->E_refl_tran(SGlob);
 
         // Compute reflection and transmission coefficients
-        R[q] = E_refl.squaredNorm();
-        T[q] = (kz_sub/kz_inc).real() * E_tran.squaredNorm();
+        R[q] = fields->E_refl.squaredNorm();
+        T[q] = (fields->kz_sub/fields->kz_inc).real() * fields->E_tran.squaredNorm();
     }
 }

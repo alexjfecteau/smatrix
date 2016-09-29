@@ -23,17 +23,18 @@ def close_session():
 
 class Fields(object):
 
-    """Properties of incident EM fields"""
+    """Properties of EM fields"""
 
-    def __init__(self, wvl, pTE, pTM, theta, phi):
-        """Polarization vector components and angles of incidence
-
+    def __init__(self, wvl, pTE, pTM, theta, phi, N_inc, N_sub):
+        """
         Input:
         wvl     : Wavelength array of incident fields (m)
         pTE     : TE component of incident electric field
         pTM     : TM component of incident electric field
         theta   : Angle of incidence with respect to normal (degrees)
         phi     : Angle of incidence on surface plane (degrees)
+        N_inc   : Refractive index of medium of incidence
+        N_sub   : Refractive index of substrate
         """
         self.wvl = wvl.astype(np.double)
         self.wvl_p = c_void_p(self.wvl.ctypes.data)
@@ -43,7 +44,11 @@ class Fields(object):
         self.pTM = c_double(pTM)
         self.theta = c_double(theta)
         self.phi = c_double(phi)
-        self.c_fields = lib.NewFields(self.pTE, self.pTM, self.theta, self.phi, self.wvl_p, self.num_wvl)
+
+        self.N_inc = c_double(N_inc)
+        self.N_sub = c_double(N_sub)
+
+        self.c_fields = lib.NewFields(self.pTE, self.pTM, self.theta, self.phi, self.wvl_p, self.num_wvl, self.N_inc, self.N_sub)
 
 
 class SingleLayerNoDisp(object):
@@ -132,13 +137,10 @@ class ScatteringMatrix(object):
     """Scattering matrix for multilayer
     """
 
-    def __init__(self, multilayer, fields, N_inc, N_sub):
+    def __init__(self, multilayer, fields):
         """Define multilayer and fields properties"""
         self.ml = multilayer
         self.fd = fields
-
-        self.N_inc = c_double(N_inc)  # Refractive index of medium of incidence
-        self.N_sub = c_double(N_sub)  # Refractive index of substrate
 
     def solve(self):
         """Solve scattering matrix problem to get reflection and
@@ -149,4 +151,4 @@ class ScatteringMatrix(object):
         self.R_p = c_void_p(self.R.ctypes.data)
         self.T_p = c_void_p(self.T.ctypes.data)
 
-        lib.solve(self.fd.c_fields, self.ml.c_layer, self.N_inc, self.N_sub, self.R_p, self.T_p)
+        lib.solve(self.fd.c_fields, self.ml.c_layer, self.R_p, self.T_p)
