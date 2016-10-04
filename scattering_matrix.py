@@ -9,16 +9,23 @@ from ctypes import c_double, c_int, c_void_p
 kernel32 = windll.LoadLibrary('kernel32')
 kernel32.FreeLibrary.argtypes = [wintypes.HMODULE]
 
-# Connect to cpp library
+# Find absolute path to cpp library
 pkg_path = os.path.dirname(os.path.abspath(__file__))
 lib_path = os.path.join(pkg_path, "bin", "smatrix.dll")
-lib = cdll.LoadLibrary(lib_path)
+
+
+def open_session():
+    """Connect to cpp library"""
+    global lib
+    lib = cdll.LoadLibrary(lib_path)
 
 
 def close_session():
     """Disconnect from cpp library"""
+    global lib
     handle = lib._handle
     kernel32.FreeLibrary(handle)
+    del lib
 
 
 class Fields(object):
@@ -146,6 +153,7 @@ class ScatteringMatrix(object):
         """Solve scattering matrix problem to get reflection and
            transmission coefficients of multilayer
         """
+        self.wvl = self.fd.wvl
         self.R = np.zeros(self.fd.num_wvl.value, dtype=np.double)
         self.T = np.zeros(self.fd.num_wvl.value, dtype=np.double)
         self.R_p = c_void_p(self.R.ctypes.data)

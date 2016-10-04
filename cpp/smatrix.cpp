@@ -27,17 +27,69 @@ public:
     Matrix2cd S_22 = Z;
 };
 
+class Layer;
+
+class SingleLayer
+{
+public:
+    Map<ArrayXd> wvl;
+    Map<ArrayXcd> N;
+    double thickness;
+    int size_array;
+    Matrix2cd V;
+    SMatrix S;
+    SingleLayer(double* wvl_p, dcomp* N_p, int size, double d):
+    wvl(wvl_p, size), N(N_p, size), size_array(size), thickness(d) {}
+};
+
+class MultiLayer
+{
+public:
+    int num_uc;
+    int num_layers;
+    std::vector<Layer*> unit_cell;
+    MultiLayer()
+    {
+        num_uc = 1;
+        num_layers = 0;
+    }
+    void add_to_unit_cell(Layer* layer_p)
+    {
+        num_layers += 1;
+        unit_cell.resize(num_layers, layer_p);
+    }
+    void clear_unit_cell()
+    {
+        unit_cell.clear();
+    }
+    void set_num_repetitions(int n)
+    {
+        num_uc = n;
+    }
+};
+
+class Layer
+{
+public:
+    enum LayerType {single, multi} type;
+    SingleLayer* single_p;
+    MultiLayer* multi_p;
+    Layer(LayerType t) : type(t) {}
+};
+
 class Fields
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     double pTE, pTM, theta, phi, kx, ky, N_inc, N_sub;
     dcomp eps_r_inc, eps_r_sub, kz_inc, kz_sub;
+    Vector3d k_inc, az, aTE, aTM, P;
+    Vector3cd E_refl, E_tran;
     Map<ArrayXd> wvl;
     int num_wvl;
     ArrayXd k0;
     Matrix2cd V_h;
-    Vector3cd E_refl, E_tran;
+
     Fields(double pTE, double pTM, double theta, double phi, double* wvl_p, int num_wvl, double N_inc, double N_sub):
     pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl(wvl_p, num_wvl), num_wvl(num_wvl), N_inc(N_inc), N_sub(N_sub)
     {
@@ -61,41 +113,46 @@ public:
         eps_r_sub = pow(N_sub, 2);
         kz_inc = sqrt(eps_r_inc - pow(kx, 2) - pow(ky, 2));
         kz_sub = sqrt(eps_r_sub - pow(kx, 2) - pow(ky, 2));
+
+        // Polarization vector of incident fields
+        k_inc << sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta);
+        az << 0, 0, 1;
+
+        if (theta == 0)
+        {
+            aTE << 0, 1, 0;
+        }
+        else
+        {
+            aTE = az.cross(k_inc);
+            aTE.normalize();
+        }
+
+        aTM = aTE.cross(k_inc);
+        aTM.normalize();
+
+        P = pTE*aTE + pTM*aTM;
+        P.normalize();
     }
     void E_refl_tran(SMatrix SGlob);
     SMatrix s_refl();
     SMatrix s_tran();
+    Vector3cd E_slayer(Layer* layer, Vector2cd& cp_1, Vector2cd& cm_1, double z, int wvl_index);
+    Vector3cd E_mlayer(Layer* layer, Vector2cd& cp_1, Vector2cd& cm_1, double z, int wvl_index);
+    void E2_field(Layer* multilayer, double z, double* E2);
 };
 
 void Fields::E_refl_tran(SMatrix SGlob)
 {
-    // Compute polarization vector of incident fields
-    Vector3d k_inc(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta));
-    Vector3d az(0, 0, 1), aTE, aTM, P;
+    // Compute reflected and transmitted fields for given scattering matrix
 
-    if (theta == 0)
-    {
-        aTE << 0, 1, 0;
-    }
-    else
-    {
-        aTE = az.cross(k_inc);
-        aTE.normalize();
-    }
-
-    aTM = aTE.cross(k_inc);
-    aTM.normalize();
-
-    P = pTE*aTE + pTM*aTM;
-    P.normalize();
-
-    // Compute reflected and transmitted fields
+    // Transverse field components
     Vector2cd e_src(P(0), P(1)), e_refl, e_tran;
 
     e_refl = SGlob.S_11*e_src;
     e_tran = SGlob.S_21*e_src;
 
-    // Compute longitudinal field components
+    // Longitudinal field components
     dcomp ez_refl = -(kx*e_refl(0) + ky*e_refl(1))/kz_inc;
     dcomp ez_tran = -(kx*e_tran(0) + ky*e_tran(1))/kz_sub;
 
@@ -154,57 +211,73 @@ SMatrix Fields::s_tran()
     return SM;
 }
 
-
-class Layer;
-
-class SingleLayer
+Vector3cd Fields::E_slayer(Layer* layer, Vector2cd& cp_1, Vector2cd& cm_1, double z, int wvl_index)
 {
-public:
-    Map<ArrayXd> wvl;
-    Map<ArrayXcd> N;
-    double thickness;
-    int size_array;
-    Matrix2cd V;
-    SMatrix S;
-    SingleLayer(double* wvl_p, dcomp* N_p, int size, double d):
-    wvl(wvl_p, size), N(N_p, size), size_array(size), thickness(d) {}
-};
+    // Compute electric field in single layer
 
-class MultiLayer
+    // Permittivity and longitudinal wavevector in single layer
+    dcomp eps_r = pow(layer->single_p->N[wvl_index], 2);
+    dcomp kz = sqrt(eps_r - pow(kx, 2) - pow(ky, 2));
+
+    // Amplitude coefficients in layer
+    Matrix2cd V_i = layer->single_p->V;
+    Matrix2cd V_i_inv = V_i.inverse();
+    Vector2cd cp_i = 0.5*V_i_inv*( (V_i + V_h)*cp_1 + (V_i - V_h)*cm_1 );
+    Vector2cd cm_i = 0.5*V_i_inv*( (V_i - V_h)*cp_1 + (V_i + V_h)*cm_1 );
+
+    // Transverse electric fields
+    Vector2cd Exy_i = (1i*kz*I*z).exp() * cp_i + (-1i*kz*I*z).exp() * cm_i;
+
+    // Longitudinal electric field
+    dcomp Ez_i = -(kx*Exy_i(0) + ky*Exy_i(1))/kz;
+    Vector3cd E_i(Exy_i(0), Exy_i(1), Ez_i);
+
+    // Update amplitude coefficients for next layer
+    SMatrix S = layer->single_p->S;
+    cm_1 = S.S_12.inverse()*(cm_1 - S.S_11*cp_1);
+    cp_1 = S.S_21*cp_1 + S.S_22*cm_1;
+
+    return E_i;
+}
+
+Vector3cd Fields::E_mlayer(Layer* layer, Vector2cd& cp_1, Vector2cd& cm_1, double z, int wvl_index)
 {
-public:
-    int num_uc;
-    int num_layers;
-    std::vector<Layer*> unit_cell;
-    MultiLayer()
-    {
-        num_uc = 1;
-        num_layers = 0;
-    }
-    void add_to_unit_cell(Layer* layer_p)
-    {
-        num_layers += 1;
-        unit_cell.resize(num_layers, layer_p);
-    }
-    void clear_unit_cell()
-    {
-        unit_cell.clear();
-    }
-    void set_num_repetitions(int n)
-    {
-        num_uc = n;
-    }
-};
+    // Compute electric field inside multilayer
 
-class Layer
+    Vector3cd ELayer;
+    if (layer->type == Layer::multi)
+    {
+        for (int k=0; k<layer->multi_p->num_uc; k+=1)
+        {
+            // Scattering matrix for unit cell of multilayer
+            for (int l=0; l<layer->multi_p->num_layers; l+=1)
+            {
+                ELayer = E_mlayer(layer->multi_p->unit_cell[l], cp_1, cm_1, z, wvl_index);
+            }
+        }
+    }
+    else
+    {
+        // Electric field for single layer
+        ELayer = E_slayer(layer, cp_1, cm_1, z, wvl_index);
+    }
+    return ELayer;
+}
+
+void Fields::E2_field(Layer* multilayer, double z, double* E2)
 {
-public:
-    enum LayerType {single, multi} type;
-    SingleLayer* single_p;
-    MultiLayer* multi_p;
-    Layer(LayerType t) : type(t) {}
-};
+    // Compute electric field squared norm inside multilayer
 
+    // Loop through all wavelengths
+    for (int q=0; q<num_wvl; q++)
+    {
+        // Amplitude coefficients
+        Vector2cd cp(P(0)), cm(P(1));
+
+        Vector3cd E = E_mlayer(multilayer, cp, cm, z, q);
+        E2[q] = E.squaredNorm();
+    }
+}
 
 extern "C" {
 
@@ -213,6 +286,11 @@ DLLEXPORT Fields* NewFields(double pTE, double pTM, double theta, double phi, do
     {
         Fields* fields_p = new Fields(pTE, pTM, theta, phi, wvl_p, num_wvl, N_inc, N_sub);
         return fields_p;
+    }
+
+DLLEXPORT void E2_field(Fields* fields, Layer* multilayer, double z, double* E2)
+    {
+        fields->E2_field(multilayer, z, E2);
     }
 
 // SingleLayer class
@@ -368,3 +446,4 @@ void solve(Fields* fields, Layer* multilayer, double* R, double* T)
         T[q] = (fields->kz_sub/fields->kz_inc).real() * fields->E_tran.squaredNorm();
     }
 }
+
