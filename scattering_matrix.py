@@ -5,6 +5,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 from ctypes import cdll, windll, wintypes
 from ctypes import c_double, c_int, c_void_p
+from ctypes import byref
 
 kernel32 = windll.LoadLibrary('kernel32')
 kernel32.FreeLibrary.argtypes = [wintypes.HMODULE]
@@ -138,6 +139,12 @@ class MultiLayer(object):
         self.num_uc.value = num
         lib.SetNumRepetitions(self.c_layer, num)
 
+    def get_thickness(self):
+        """Compute total thickness of multilayer
+        """
+        self.thk = c_double()
+        lib.GetThkLayer(byref(self.thk))
+
 
 class ScatteringMatrix(object):
 
@@ -148,15 +155,26 @@ class ScatteringMatrix(object):
         """Define multilayer and fields properties"""
         self.ml = multilayer
         self.fd = fields
+        self.wvl = self.fd.wvl
+        self.R = np.empty(self.fd.num_wvl.value, dtype=np.double)
+        self.T = np.empty(self.fd.num_wvl.value, dtype=np.double)
+        self.R_p = c_void_p(self.R.ctypes.data)
+        self.T_p = c_void_p(self.T.ctypes.data)
+        self.sm = lib.NewScatteringMatrix(self.ml.c_layer, self.fd.c_fields, self.R_p, self.T_p)
 
     def solve(self):
         """Solve scattering matrix problem to get reflection and
            transmission coefficients of multilayer
         """
-        self.wvl = self.fd.wvl
-        self.R = np.zeros(self.fd.num_wvl.value, dtype=np.double)
-        self.T = np.zeros(self.fd.num_wvl.value, dtype=np.double)
-        self.R_p = c_void_p(self.R.ctypes.data)
-        self.T_p = c_void_p(self.T.ctypes.data)
+        lib.SolveSM(self.sm)
 
-        lib.solve(self.fd.c_fields, self.ml.c_layer, self.R_p, self.T_p)
+    def compute_E(self):
+        """Compute electric field components and squared norm as a
+           function of wavelength and depth in multilayer
+        """
+        # Try if solve() was apply. If not, run solve().
+        #lib.ComputeE(self.ml)
+
+        # Find number of positions in multilayer
+        #self.
+        #self.Ex = np.empty([self.fd.num_wvl.value, ], dtype=np.complex)

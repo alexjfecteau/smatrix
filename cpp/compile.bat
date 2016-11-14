@@ -1,1 +1,0 @@
-icl /Qmkl /LD /I C:\Users\alexj\Documents\Programmes\Eigen\eigen-eigen-dc6cfdf9bcec /Fe..\bin\smatrix smatrix.cpp
