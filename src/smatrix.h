@@ -43,12 +43,12 @@ public:
     Fields* f_p;
     double* R_p;
     double* T_p;
-    SMatrix SGlob, SRefl, STran, SMulti;
 
-    ScatteringMatrix(Layer* multilayer, Fields* fields, double* R, double* T);
+    ScatteringMatrix(Layer* multilayer, Fields* fields);
     SMatrix S_refl();
     SMatrix S_tran();
-    void solve();
+    void compute_R_T(double* R, double* T);
+    void compute_E(int wvl_index, double* E2_p);
 };
 
 

@@ -73,6 +73,8 @@ class SingleLayerNoDisp(object):
         self.N = n*np.ones(len(self.wvl), dtype=np.complex)
         self.d = c_double(d)
         self.num_wvl = c_int(len(self.wvl))
+        self.num_z = 0
+
         self.c_layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
 
 
@@ -95,6 +97,8 @@ class SingleLayerDisp(object):
 
         self.d = c_double(d)
         self.num_wvl = c_int(len(self.wvl))
+        self.num_z = 0
+
         self.c_layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
 
     def generate_N_for_wvl(self, wvl):
@@ -115,8 +119,10 @@ class MultiLayer(object):
 
     def __init__(self, *layers):
 
-        self.unit_cell = []           # List of layers in unit cell
-        self.num_uc = c_int(1)        # Number of repetitions of unit cell
+        self.unit_cell = []      # List of layers in unit cell
+        self.num_uc = c_int(1)   # Number of repetitions of unit cell
+        self.num_z = 0           # Number of positions inside multilayer
+
         self.c_layer = lib.NewMultiLayer()
         self.add_to_unit_cell(*layers)
 
@@ -160,21 +166,21 @@ class ScatteringMatrix(object):
         self.T = np.empty(self.fd.num_wvl.value, dtype=np.double)
         self.R_p = c_void_p(self.R.ctypes.data)
         self.T_p = c_void_p(self.T.ctypes.data)
-        self.sm = lib.NewScatteringMatrix(self.ml.c_layer, self.fd.c_fields, self.R_p, self.T_p)
+        self.sm = lib.NewScatteringMatrix(self.ml.c_layer, self.fd.c_fields)
 
     def solve(self):
         """Solve scattering matrix problem to get reflection and
            transmission coefficients of multilayer
         """
-        lib.SolveSM(self.sm)
+        lib.ComputeRT(self.sm, self.R_p, self.T_p)
 
-    def compute_E(self):
+    def compute_E(self, wvl_index):
         """Compute electric field components and squared norm as a
            function of wavelength and depth in multilayer
         """
         # Try if solve() was apply. If not, run solve().
-        #lib.ComputeE(self.ml)
+        self.E2 = np.empty(10, dtype=np.double)
+        self.E2_p = c_void_p(self.E2.ctypes.data)
+        lib.ComputeE(self.sm, wvl_index, self.E2_p)
 
         # Find number of positions in multilayer
-        #self.
-        #self.Ex = np.empty([self.fd.num_wvl.value, ], dtype=np.complex)

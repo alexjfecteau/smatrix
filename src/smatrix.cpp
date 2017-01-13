@@ -26,8 +26,8 @@ SMatrix redheffer(SMatrix SA, SMatrix SB)
     return SAB;
 }
 
-ScatteringMatrix::ScatteringMatrix(Layer* multilayer, Fields* fields, double* R, double* T):
-m_p(multilayer), f_p(fields), R_p(R), T_p(T) {}
+ScatteringMatrix::ScatteringMatrix(Layer* multilayer, Fields* fields):
+m_p(multilayer), f_p(fields) {}
 
 SMatrix ScatteringMatrix::S_refl()
 {
@@ -79,8 +79,14 @@ SMatrix ScatteringMatrix::S_tran()
     return SM;
 }
 
-void ScatteringMatrix::solve()
+void ScatteringMatrix::compute_R_T(double* R, double* T)
 {
+    // Compute reflection and transmission coefficients
+    R_p = R;
+    T_p = T;
+
+    SMatrix SGlob, SRefl, STran, SMulti;
+
     // Scattering matrix for reflection side
     SRefl = S_refl();
 
@@ -110,4 +116,20 @@ void ScatteringMatrix::solve()
         R_p[q] = f_p->E_refl.squaredNorm();
         T_p[q] = (f_p->kz_sub/f_p->kz_inc).real() * f_p->E_tran.squaredNorm();
     }
+}
+
+void ScatteringMatrix::compute_E(int wvl_index, double* E2_p)
+{
+    // Compute electric field in structure
+
+    // Initial field coefficients
+    m_p->cp_1 << f_p->P(0), f_p->P(1);
+    m_p->cm_1 << 0, 0;
+
+    m_p->compute_E(f_p, wvl_index);
+
+    //Eigen::Map<Eigen::ArrayXcd> Ex, Ey, Ez;
+    Eigen::Map<Eigen::ArrayXd> E2(E2_p, m_p->size_z);
+
+    E2 << m_p->E2;
 }

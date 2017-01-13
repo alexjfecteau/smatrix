@@ -35,7 +35,6 @@ public:
     void E_refl_tran(SMatrix SGlob);
     void E_slayer(Layer* layer, int wvl_index);
     void E_mlayer(Layer* layer, int wvl_index);
-    void compute_E(Layer* multilayer);
 };
 
 #endif

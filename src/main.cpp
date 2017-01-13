@@ -18,11 +18,6 @@ DLLEXPORT Fields* NewFields(double pTE, double pTM, double theta, double phi, do
         return f_p;
     }
 
-//DLLEXPORT void ComputeE(Fields* fields, Layer* multilayer)
-//    {
-//        fields->compute_E(multilayer);
-//    }
-
 // SingleLayer functions
 DLLEXPORT Layer* NewSingleLayer(double* wvl_p, dcomp* N_p, int size, double d)
     {
@@ -56,16 +51,19 @@ DLLEXPORT void SetNumRepetitions(Layer* multilayer, int n)
 
 // Scattering matrix functions
 
-DLLEXPORT ScatteringMatrix* NewScatteringMatrix(Layer* multilayer, Fields* fields, double* R, double* T)
+DLLEXPORT ScatteringMatrix* NewScatteringMatrix(Layer* multilayer, Fields* fields)
     {
-        ScatteringMatrix* sm_p = new ScatteringMatrix(multilayer, fields, R, T);
+        ScatteringMatrix* sm_p = new ScatteringMatrix(multilayer, fields);
         return sm_p;
     }
 
-
-DLLEXPORT void SolveSM(ScatteringMatrix* sm)
+DLLEXPORT void ComputeRT(ScatteringMatrix* sm, double* R, double* T)
     {
-        sm->solve();
+        sm->compute_R_T(R, T);
     }
 
+DLLEXPORT void ComputeE(ScatteringMatrix* sm, int wvl_index, double* E2)
+    {
+        sm->compute_E(wvl_index, E2);
+    }
 }
