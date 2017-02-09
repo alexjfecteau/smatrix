@@ -32,7 +32,7 @@ public:
     Eigen::Matrix2cd V_h;
 
     Fields(double pTE, double pTM, double theta, double phi, double* wvl_p, int size_wvl, double N_inc, double N_sub);
-    void E_refl_tran(SMatrix SGlob);
+    void Compute_E_refl_tran(SMatrix SGlob);
     void E_slayer(Layer* layer, int wvl_index);
     void E_mlayer(Layer* layer, int wvl_index);
 };

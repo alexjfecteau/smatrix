@@ -50,7 +50,7 @@ pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl(wvl_p, size_wvl), size_wvl(size_
     P.normalize();
 }
 
-void Fields::E_refl_tran(SMatrix SGlob)
+void Fields::Compute_E_refl_tran(SMatrix SGlob)
 {
     // Compute reflected and transmitted fields
 

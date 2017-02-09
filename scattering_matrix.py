@@ -162,8 +162,12 @@ class ScatteringMatrix(object):
         self.ml = multilayer
         self.fd = fields
         self.wvl = self.fd.wvl
+        self.r = np.empty(self.fd.num_wvl.value, dtype=np.complex)
+        self.t = np.empty(self.fd.num_wvl.value, dtype=np.complex)
         self.R = np.empty(self.fd.num_wvl.value, dtype=np.double)
         self.T = np.empty(self.fd.num_wvl.value, dtype=np.double)
+        self.r_p = c_void_p(self.r.ctypes.data)
+        self.t_p = c_void_p(self.t.ctypes.data)
         self.R_p = c_void_p(self.R.ctypes.data)
         self.T_p = c_void_p(self.T.ctypes.data)
         self.sm = lib.NewScatteringMatrix(self.ml.c_layer, self.fd.c_fields)
@@ -172,13 +176,13 @@ class ScatteringMatrix(object):
         """Solve scattering matrix problem to get reflection and
            transmission coefficients of multilayer
         """
-        lib.ComputeRT(self.sm, self.R_p, self.T_p)
+        lib.ComputeRT(self.sm, self.r_p, self.t_p, self.R_p, self.T_p)
 
     def compute_E(self, wvl_index):
         """Compute electric field components and squared norm as a
            function of wavelength and depth in multilayer
         """
-        # Try if solve() was apply. If not, run solve().
+        # Try if solve() was applied. If not, run solve().
         self.E2 = np.empty(10, dtype=np.double)
         self.E2_p = c_void_p(self.E2.ctypes.data)
         lib.ComputeE(self.sm, wvl_index, self.E2_p)

@@ -14,6 +14,10 @@ class Layer;
 #include <Eigen/Dense>
 
 //=================================
+// type definitions
+typedef std::complex<double> dcomp;
+
+//=================================
 
 extern Eigen::Matrix2cd I;
 extern Eigen::Matrix2cd Z;
@@ -41,13 +45,15 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     Layer* m_p;
     Fields* f_p;
+    dcomp* r_p;
+    dcomp* t_p;
     double* R_p;
     double* T_p;
 
     ScatteringMatrix(Layer* multilayer, Fields* fields);
     SMatrix S_refl();
     SMatrix S_tran();
-    void compute_R_T(double* R, double* T);
+    void compute_R_T(dcomp* r_p, dcomp* t_p, double* R, double* T);
     void compute_E(int wvl_index, double* E2_p);
 };
 

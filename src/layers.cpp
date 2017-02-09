@@ -72,8 +72,21 @@ void SingleLayer::compute_E(Fields* f_p, int wvl_index)
     dcomp kz = sqrt(eps_r[wvl_index] - pow(f_p->kx, 2) - pow(f_p->ky, 2));
 
     // Amplitude coefficients in layer
-    cp_i = 0.5*V_inv*((V + f_p->V_h) * cp_1 + (V - f_p->V_h) * cm_1 );
-    cm_i = 0.5*V_inv*((V - f_p->V_h) * cp_1 + (V + f_p->V_h) * cm_1 );
+    VectorXcd c_i(4), c_1(4);
+    MatrixXcd T_i(4, 4), T_1(4, 4);
+
+    T_i << I, I,
+           V, -V;
+    T_1 << I, I,
+           f_p->V_h, -f_p->V_h;
+    c_1 << cp_1, cm_1;
+
+    c_i = T_i.inverse() * T_1 * c_1;
+    //cp_i = c_i(0);
+    //cm_i = c_i(1);
+
+    //cp_i = 0.5*V_inv*((V + f_p->V_h) * cp_1 + (V - f_p->V_h) * cm_1 );
+    //cm_i = 0.5*V_inv*((V - f_p->V_h) * cp_1 + (V + f_p->V_h) * cm_1 );
 
     // Loop over all positions in layer
     Vector2cd Exy;
@@ -94,8 +107,8 @@ void SingleLayer::compute_E(Fields* f_p, int wvl_index)
     }
 
     // Update amplitude coefficients for next layer
-    cm_1_next = S.S_12.inverse()*(cm_1 - S.S_11*cp_1);
-    cp_1_next = S.S_21*cp_1 + S.S_22*cm_1;
+    //cm_1_next = S.S_12.inverse()*(cm_1 - S.S_11*cp_1);
+    //cp_1_next = S.S_21*cp_1 + S.S_22*cm_1;
 }
 
 MultiLayer::MultiLayer()

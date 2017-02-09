@@ -79,9 +79,11 @@ SMatrix ScatteringMatrix::S_tran()
     return SM;
 }
 
-void ScatteringMatrix::compute_R_T(double* R, double* T)
+void ScatteringMatrix::compute_R_T(dcomp* r, dcomp* t, double* R, double* T)
 {
-    // Compute reflection and transmission coefficients
+    // Compute Fresnel coefficients, reflectance and transmittance
+    r_p = r;
+    t_p = t;
     R_p = R;
     T_p = T;
 
@@ -110,9 +112,13 @@ void ScatteringMatrix::compute_R_T(double* R, double* T)
         SGlob = redheffer(SGlob, STran);
 
         // Compute reflected and transmitted electric fields
-        f_p->E_refl_tran(SGlob);
+        f_p->Compute_E_refl_tran(SGlob);
 
-        // Compute reflection and transmission coefficients
+        // Compute Fresnel coefficients
+        r_p[q] = f_p->E_refl(1)/f_p->P(1);
+        t_p[q] = f_p->E_tran(1)/f_p->P(1);
+
+        // Compute reflectance and transmittance
         R_p[q] = f_p->E_refl.squaredNorm();
         T_p[q] = (f_p->kz_sub/f_p->kz_inc).real() * f_p->E_tran.squaredNorm();
     }
