@@ -7,6 +7,7 @@
 //=================================
 // forward declared dependencies
 class Fields;
+class SemiInfMed;
 class Layer;
 
 //=================================
@@ -45,17 +46,15 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     Layer* m_p;
     Fields* f_p;
+    SemiInfMed* inc_p;
+    SemiInfMed* sub_p;
     dcomp* r_p;
     dcomp* t_p;
     double* R_p;
     double* T_p;
 
-    ScatteringMatrix(Layer* multilayer, Fields* fields);
-    SMatrix S_refl();
-    SMatrix S_tran();
+    ScatteringMatrix(Layer* multilayer, Fields* fields, SemiInfMed* inc_med, SemiInfMed* sub_med);
     void compute_R_T(dcomp* r_p, dcomp* t_p, double* R, double* T);
-    void compute_E(int wvl_index, double* E2_p);
 };
-
 
 #endif

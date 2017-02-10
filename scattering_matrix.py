@@ -33,7 +33,7 @@ class Fields(object):
 
     """Properties of EM fields"""
 
-    def __init__(self, wvl, pTE, pTM, theta, phi, N_inc, N_sub):
+    def __init__(self, wvl, pTE, pTM, theta, phi):
         """
         Input:
         wvl     : Wavelength array of incident fields (m)
@@ -41,8 +41,6 @@ class Fields(object):
         pTM     : TM component of incident electric field
         theta   : Angle of incidence with respect to normal (degrees)
         phi     : Angle of incidence on surface plane (degrees)
-        N_inc   : Refractive index of medium of incidence
-        N_sub   : Refractive index of substrate
         """
         self.wvl = wvl.astype(np.double)
         self.wvl_p = c_void_p(self.wvl.ctypes.data)
@@ -53,61 +51,101 @@ class Fields(object):
         self.theta = c_double(theta)
         self.phi = c_double(phi)
 
-        self.N_inc = c_double(N_inc)
-        self.N_sub = c_double(N_sub)
+        self.c_fields = lib.NewFields(self.pTE, self.pTM, self.theta, self.phi, self.wvl_p, self.num_wvl)
 
-        self.c_fields = lib.NewFields(self.pTE, self.pTM, self.theta, self.phi, self.wvl_p, self.num_wvl, self.N_inc, self.N_sub)
+
+class SemiInfMedNoDisp(object):
+    """Semi-infinite medium with no dispersion"""
+
+    def __init__(self, n, fields):
+        """
+        Input:
+        n      : Refractive index
+        fields : Incident electric field object
+        """
+        self.wvl = fields.wvl
+        self.N = n*np.ones(len(self.wvl), dtype=np.complex)
+        self.num_wvl = c_int(len(self.wvl))
+
+        self.c_med = lib.NewSemiInfMed(self.N.ctypes.data, self.num_wvl)
+
+
+class SemiInfMedDisp(object):
+    """Semi-infinite medium with dispersion"""
+
+    def __init__(self, wvl_disp, N_disp, fields):
+        """
+        Input:
+        wvl_disp : Wavelengths array for dispersion relation
+        N_disp   : Complex refractive index array for dispersion relation
+        fields   : Incident electric field object
+        """
+        self.wvl_disp = wvl_disp.astype(np.double)
+        self.N_disp = N_disp.astype(np.complex)
+
+        self.wvl = fields.wvl
+        self.generate_N_for_wvl()
+
+        self.c_med = lib.NewSemiInfMed(self.N.ctypes.data, self.num_wvl)
+
+    def generate_N_for_wvl(self):
+        """Interpolate refractive index for wavelength array using cubic splines"""
+        n_interp = interp1d(self.wvl_disp, self.N_disp.real, kind="cubic")
+        k_interp = interp1d(self.wvl_disp, self.N_disp.imag, kind="cubic")
+
+        self.N = n_interp(self.wvl) + 1j*k_interp(self.wvl)
+
+        # TODO : Raise error of interpolation range is larger than dispersion data
 
 
 class SingleLayerNoDisp(object):
     """Single layer of a simple material with no dispersion"""
 
-    def __init__(self, n, d, wvl):
+    def __init__(self, n, d, fields):
         """
         Input:
-        n   : Refractive index
-        d   : Thickness of layer (m)
-        wvl : Wavelength of incident field (m)
+        n      : Refractive index
+        d      : Thickness of layer (m)
+        fields : Incident electric field object
         """
-        self.wvl = wvl.astype(np.double)
+        self.wvl = fields.wvl
         self.N = n*np.ones(len(self.wvl), dtype=np.complex)
         self.d = c_double(d)
         self.num_wvl = c_int(len(self.wvl))
         self.num_z = 0
 
-        self.c_layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
+        self.c_layer = lib.NewSingleLayer(self.N.ctypes.data, self.num_wvl, self.d)
 
 
 class SingleLayerDisp(object):
     """Single layer of a polar material with dispersion relation"""
 
-    def __init__(self, wvl_disp, N_disp, d, wvl):
+    def __init__(self, wvl_disp, N_disp, d, fields):
         """
         Input:
         wvl_disp : Wavelengths array for dispersion relation
         N_disp   : Complex refractive index array for dispersion relation
         d        : Thickness of layer (m)
+        fields   : Incident electric field object
         """
         self.wvl_disp = wvl_disp.astype(np.double)
         self.N_disp = N_disp.astype(np.complex)
 
-        self.wvl = wvl_disp
-        self.N = self.N_disp
-        self.generate_N_for_wvl(wvl)
+        self.wvl = fields.wvl
+        self.generate_N_for_wvl()
 
         self.d = c_double(d)
         self.num_wvl = c_int(len(self.wvl))
         self.num_z = 0
 
-        self.c_layer = lib.NewSingleLayer(self.wvl.ctypes.data, self.N.ctypes.data, self.num_wvl, self.d)
+        self.c_layer = lib.NewSingleLayer(self.N.ctypes.data, self.num_wvl, self.d)
 
-    def generate_N_for_wvl(self, wvl):
+    def generate_N_for_wvl(self):
         """Interpolate refractive index for new wavelength array using cubic splines"""
         n_interp = interp1d(self.wvl_disp, self.N_disp.real, kind="cubic")
         k_interp = interp1d(self.wvl_disp, self.N_disp.imag, kind="cubic")
 
-        self.wvl = wvl.astype(np.double)
-        self.N = n_interp(wvl) + 1j*k_interp(wvl)
+        self.N = n_interp(self.wvl) + 1j*k_interp(self.wvl)
 
         # TODO : Raise error of interpolation range is larger than dispersion data
 
@@ -157,10 +195,12 @@ class ScatteringMatrix(object):
     """Scattering matrix for multilayer
     """
 
-    def __init__(self, multilayer, fields):
+    def __init__(self, multilayer, fields, inc_med, sub_med):
         """Define multilayer and fields properties"""
         self.ml = multilayer
         self.fd = fields
+        self.incm = inc_med
+        self.subm = sub_med
         self.wvl = self.fd.wvl
         self.r = np.empty(self.fd.num_wvl.value, dtype=np.complex)
         self.t = np.empty(self.fd.num_wvl.value, dtype=np.complex)
@@ -170,21 +210,10 @@ class ScatteringMatrix(object):
         self.t_p = c_void_p(self.t.ctypes.data)
         self.R_p = c_void_p(self.R.ctypes.data)
         self.T_p = c_void_p(self.T.ctypes.data)
-        self.sm = lib.NewScatteringMatrix(self.ml.c_layer, self.fd.c_fields)
+        self.sm = lib.NewScatteringMatrix(self.ml.c_layer, self.fd.c_fields, self.incm.c_med, self.subm.c_med)
 
     def solve(self):
         """Solve scattering matrix problem to get reflection and
            transmission coefficients of multilayer
         """
         lib.ComputeRT(self.sm, self.r_p, self.t_p, self.R_p, self.T_p)
-
-    def compute_E(self, wvl_index):
-        """Compute electric field components and squared norm as a
-           function of wavelength and depth in multilayer
-        """
-        # Try if solve() was applied. If not, run solve().
-        self.E2 = np.empty(10, dtype=np.double)
-        self.E2_p = c_void_p(self.E2.ctypes.data)
-        lib.ComputeE(self.sm, wvl_index, self.E2_p)
-
-        # Find number of positions in multilayer

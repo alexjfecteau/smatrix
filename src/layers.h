@@ -26,13 +26,7 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     SMatrix S;
     double thk;
-    Eigen::Vector2cd cp_1, cm_1, cp_1_next, cm_1_next, cp_i, cm_i;
-    Eigen::ArrayXcd Ex, Ey, Ez;
-    Eigen::ArrayXd E2;
-    Eigen::ArrayXd z;
-    int size_z;
     virtual void compute_S(Fields* fields, int wvl_index) = 0;
-    virtual void compute_E(Fields* fields, int wvl_index) = 0;
     virtual void add_to_unit_cell(Layer* layer) = 0;
     virtual void clear_unit_cell() = 0;
     virtual void set_num_repetitions(int n) = 0;
@@ -43,15 +37,12 @@ class SingleLayer : public Layer
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    Eigen::Map<Eigen::ArrayXd> wvl;
     Eigen::Map<Eigen::ArrayXcd> N;
     Eigen::ArrayXcd eps_r;
-    int size_wvl;
-    Eigen::Matrix2cd Q, Omega, V, V_inv, Vp, X, A, A_inv, B, M, D, D_inv;
+    dcomp kx, ky, kz;
 
-    SingleLayer(double* wvl_p, dcomp* N_p, int wvl_s, double d);
-    void compute_S(Fields* fields, int wvl_index);
-    void compute_E(Fields* fields, int wvl_index);
+    SingleLayer(dcomp* N_p, int wvl_s, double d);
+    void compute_S(Fields* f_p, int wvl_index);
     void add_to_unit_cell(Layer* layer) {};
     void clear_unit_cell() {};
     void set_num_repetitions(int n) {};
@@ -65,13 +56,11 @@ public:
     int num_uc;
     int num_layers;
     double thk_uc;
-    int size_z_uc;
     SMatrix S_uc;
     std::vector<Layer*> unit_cell;
 
     MultiLayer();
-    void compute_S(Fields* fields, int wvl_index);
-    void compute_E(Fields* fields, int wvl_index);
+    void compute_S(Fields* f_p, int wvl_index);
     void add_to_unit_cell(Layer* layer);
     void clear_unit_cell();
     void set_num_repetitions(int n);

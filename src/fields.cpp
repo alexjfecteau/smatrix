@@ -1,12 +1,13 @@
 
 #define EIGEN_USE_MKL_ALL
 #include "fields.h"
+#include "sinfmed.h"
 
 using namespace Eigen;
 using namespace std::complex_literals;
 
-Fields::Fields(double pTE, double pTM, double theta, double phi, double* wvl_p, int size_wvl, double N_inc, double N_sub):
-pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl(wvl_p, size_wvl), size_wvl(size_wvl), N_inc(N_inc), N_sub(N_sub)
+Fields::Fields(double pTE, double pTM, double theta, double phi, double* wvl_p, int size_wvl):
+pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl(wvl_p, size_wvl), size_wvl(size_wvl)
 {
     // Convert angles to radians
     theta = M_PI*theta/180;
@@ -14,20 +15,6 @@ pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl(wvl_p, size_wvl), size_wvl(size_
 
     // Incident wave vector amplitude
     k0 = 2.0*M_PI/wvl;
-
-    // Transverse wave vectors
-    kx = N_inc*sin(theta)*cos(phi);
-    ky = N_inc*sin(theta)*sin(phi);
-
-    V_h << kx*ky, 1.0 + ky*ky,
-           -1.0 - kx*kx, -kx*ky;
-    V_h = -1i*V_h;
-
-    // Permittivities and longitudinal wavevectors in incident medium and substrate
-    eps_r_inc = pow(N_inc, 2);
-    eps_r_sub = pow(N_sub, 2);
-    kz_inc = sqrt(eps_r_inc - pow(kx, 2) - pow(ky, 2));
-    kz_sub = sqrt(eps_r_sub - pow(kx, 2) - pow(ky, 2));
 
     // Polarization vector of incident fields
     k_inc << sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta);
@@ -50,7 +37,14 @@ pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl(wvl_p, size_wvl), size_wvl(size_
     P.normalize();
 }
 
-void Fields::Compute_E_refl_tran(SMatrix SGlob)
+void Fields::compute_kx_ky(SemiInfMed* inc_p)
+{
+    // Compute transverse components of the wavevector
+    kx = inc_p->N*sin(theta)*cos(phi);
+    ky = inc_p->N*sin(theta)*sin(phi);
+}
+
+void Fields::compute_E_refl_tran(SMatrix SGlob, SemiInfMed* inc_p, SemiInfMed* sub_p, int wvl_index)
 {
     // Compute reflected and transmitted fields
 
@@ -61,8 +55,8 @@ void Fields::Compute_E_refl_tran(SMatrix SGlob)
     e_tran = SGlob.S_21*e_src;
 
     // Longitudinal field components
-    dcomp ez_refl = -(kx*e_refl(0) + ky*e_refl(1))/kz_inc;
-    dcomp ez_tran = -(kx*e_tran(0) + ky*e_tran(1))/kz_sub;
+    dcomp ez_refl = -(kx[wvl_index]*e_refl(0) + ky[wvl_index]*e_refl(1))/inc_p->kz[wvl_index];
+    dcomp ez_tran = -(kx[wvl_index]*e_tran(0) + ky[wvl_index]*e_tran(1))/sub_p->kz[wvl_index];
 
     // Update reflected and transmitted fields
     E_refl << e_refl(0), e_refl(1), ez_refl;

@@ -2,6 +2,7 @@
 #define EIGEN_USE_MKL_ALL
 #include "smatrix.h"
 #include "layers.h"
+#include "sinfmed.h"
 #include "fields.h"
 
 using namespace Eigen;
@@ -26,80 +27,28 @@ SMatrix redheffer(SMatrix SA, SMatrix SB)
     return SAB;
 }
 
-ScatteringMatrix::ScatteringMatrix(Layer* multilayer, Fields* fields):
-m_p(multilayer), f_p(fields) {}
-
-SMatrix ScatteringMatrix::S_refl()
-{
-    // Compute scattering matrix for semi-infinite medium on reflection side
-
-    Matrix2cd Q, Omega, V, Vp, X, A, A_inv, B;
-
-    Q << f_p->kx*f_p->ky, f_p->eps_r_inc - pow(f_p->kx, 2),
-         pow(f_p->ky, 2) - f_p->eps_r_inc, -f_p->kx*f_p->ky;
-
-    Omega = 1i*f_p->kz_inc*I;
-    V = Q*Omega.inverse();
-    Vp = f_p->V_h.inverse()*V;
-    A = I + Vp;
-    B = I - Vp;
-    A_inv = A.inverse();
-
-    SMatrix SM;
-    SM.S_11 = -A_inv*B;
-    SM.S_12 = 2*A_inv;
-    SM.S_21 = 0.5*(A - B*A_inv*B);
-    SM.S_22 = B*A_inv;
-
-    return SM;
-}
-
-SMatrix ScatteringMatrix::S_tran()
-{
-    // Compute scattering matrix for semi-infinite medium on transmission side
-
-    Matrix2cd Q, Omega, V, Vp, X, A, A_inv, B;
-
-    Q << f_p->kx*f_p->ky, f_p->eps_r_sub - pow(f_p->kx, 2),
-         pow(f_p->ky, 2) - f_p->eps_r_sub, -f_p->kx*f_p->ky;
-
-    Omega = 1i*f_p->kz_sub*I;
-    V = Q*Omega.inverse();
-    Vp = f_p->V_h.inverse()*V;
-    A = I + Vp;
-    B = I - Vp;
-    A_inv = A.inverse();
-
-    SMatrix SM;
-    SM.S_11 = B*A_inv;
-    SM.S_12 = 0.5*(A - B*A_inv*B);
-    SM.S_21 = 2*A_inv;
-    SM.S_22 = -A_inv*B;
-
-    return SM;
-}
+ScatteringMatrix::ScatteringMatrix(Layer* multilayer, Fields* fields, SemiInfMed* inc_med, SemiInfMed* sub_med):
+m_p(multilayer), f_p(fields), inc_p(inc_med), sub_p(sub_med) {}
 
 void ScatteringMatrix::compute_R_T(dcomp* r, dcomp* t, double* R, double* T)
 {
-    // Compute Fresnel coefficients, reflectance and transmittance
+    // Fresnel coefficients, reflectance and transmittance
     r_p = r;
     t_p = t;
     R_p = R;
     T_p = T;
 
-    SMatrix SGlob, SRefl, STran, SMulti;
-
-    // Scattering matrix for reflection side
-    SRefl = S_refl();
-
-    // Scattering matrix for transmission side
-    STran = S_tran();
+    // Compute wavevector components
+    f_p->compute_kx_ky(inc_p);
+    inc_p->compute_kz(f_p);
+    sub_p->compute_kz(f_p);
 
     // Loop through all wavelengths
+    SMatrix SGlob, STran, SMulti;
     for (int q=0; q<f_p->size_wvl; q++)
     {
-        // Scattering matrix on reflection side
-        SGlob = SRefl;
+        // Set SGlob as scattering matrix on reflection side
+        SGlob = inc_p->compute_S_refl(f_p, q);
 
         // Multiply global scattering matrix by scattering matrix
         // of multilayer using Redheffer star product
@@ -109,10 +58,11 @@ void ScatteringMatrix::compute_R_T(dcomp* r, dcomp* t, double* R, double* T)
 
         // Multiply global scattering matrix by scattering matrix
         // on transmission side using Redheffer star product
+        STran = sub_p->compute_S_tran(f_p, q);
         SGlob = redheffer(SGlob, STran);
 
         // Compute reflected and transmitted electric fields
-        f_p->Compute_E_refl_tran(SGlob);
+        f_p->compute_E_refl_tran(SGlob, inc_p, sub_p, q);
 
         // Compute Fresnel coefficients
         r_p[q] = f_p->E_refl(1)/f_p->P(1);
@@ -120,22 +70,6 @@ void ScatteringMatrix::compute_R_T(dcomp* r, dcomp* t, double* R, double* T)
 
         // Compute reflectance and transmittance
         R_p[q] = f_p->E_refl.squaredNorm();
-        T_p[q] = (f_p->kz_sub/f_p->kz_inc).real() * f_p->E_tran.squaredNorm();
+        T_p[q] = (sub_p->kz[q]/inc_p->kz[q]).real() * f_p->E_tran.squaredNorm();
     }
-}
-
-void ScatteringMatrix::compute_E(int wvl_index, double* E2_p)
-{
-    // Compute electric field in structure
-
-    // Initial field coefficients
-    m_p->cp_1 << f_p->P(0), f_p->P(1);
-    m_p->cm_1 << 0, 0;
-
-    m_p->compute_E(f_p, wvl_index);
-
-    //Eigen::Map<Eigen::ArrayXcd> Ex, Ey, Ez;
-    Eigen::Map<Eigen::ArrayXd> E2(E2_p, m_p->size_z);
-
-    E2 << m_p->E2;
 }
