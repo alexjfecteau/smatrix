@@ -84,6 +84,7 @@ class SemiInfMedDisp(object):
         self.N_disp = N_disp.astype(np.complex)
 
         self.wvl = fields.wvl
+        self.num_wvl = c_int(len(self.wvl))
         self.generate_N_for_wvl()
 
         self.c_med = lib.NewSemiInfMed(self.N.ctypes.data, self.num_wvl)
