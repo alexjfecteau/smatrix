@@ -20,7 +20,7 @@ void SingleLayer::compute_S(Fields* f_p, int wvl_index)
 {
     // Compute scattering matrix for layer of finite size
 
-    Matrix2cd Q, Omega, V_h, V, V_inv, Vp, X, A, A_inv, B, M, D, D_inv;
+    Matrix2cd Q, Omega, V_h, V, Vp, X, A, A_inv, B, M, D, D_inv;
 
     // Transverse components of the wavevector in the layer
     kx = f_p->kx[wvl_index];
@@ -29,18 +29,17 @@ void SingleLayer::compute_S(Fields* f_p, int wvl_index)
     // Longitudinal component of the wavevector in the layer
     kz = sqrt(eps_r[wvl_index] - pow(kx, 2) - pow(ky, 2));
 
-    Q << kx*ky, eps_r[wvl_index] - pow(kx, 2),
-         pow(ky, 2) - eps_r[wvl_index], -kx*ky;
-
     V_h << kx*ky, 1.0 + ky*ky,
           -1.0 - kx*kx, -kx*ky;
     V_h = -1i*V_h;
 
+    Q << kx*ky, eps_r[wvl_index] - pow(kx, 2),
+         pow(ky, 2) - eps_r[wvl_index], -kx*ky;
+
     Omega = 1i*kz*I;
     V = Q*Omega.inverse();
     X = (f_p->k0[wvl_index]*thk*Omega).exp();
-    V_inv = V.inverse();
-    Vp = V_inv*V_h;
+    Vp = V.inverse()*V_h;
     A = I + Vp;
     B = I - Vp;
     A_inv = A.inverse();

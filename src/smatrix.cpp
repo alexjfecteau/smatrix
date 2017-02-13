@@ -64,7 +64,7 @@ void ScatteringMatrix::compute_R_T(dcomp* r, dcomp* t, double* R, double* T)
         // Compute reflected and transmitted electric fields
         f_p->compute_E_refl_tran(SGlob, inc_p, sub_p, q);
 
-        // Compute Fresnel coefficients
+        // Compute Fresnel coefficients for TE polarization
         r_p[q] = f_p->E_refl(1)/f_p->P(1);
         t_p[q] = f_p->E_tran(1)/f_p->P(1);
 

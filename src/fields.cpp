@@ -13,7 +13,7 @@ pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl(wvl_p, size_wvl), size_wvl(size_
     theta = M_PI*theta/180;
     phi = M_PI*phi/180;
 
-    // Incident wave vector amplitude
+    // Wavevector amplitude in vacuum
     k0 = 2.0*M_PI/wvl;
 
     // Polarization vector of incident fields
