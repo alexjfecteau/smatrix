@@ -65,8 +65,8 @@ DLLEXPORT ScatteringMatrix* NewScatteringMatrix(Layer* multilayer, Fields* field
         return sm_p;
     }
 
-DLLEXPORT void ComputeRT(ScatteringMatrix* sm, dcomp* r, dcomp* t, double* R, double* T)
+DLLEXPORT void ComputeRT(ScatteringMatrix* sm, dcomp* r_p, dcomp* t_p, double* R_p, double* T_p)
     {
-        sm->compute_R_T(r, t, R, T);
+        sm->compute_R_T(r_p, t_p, R_p, T_p);
     }
 }

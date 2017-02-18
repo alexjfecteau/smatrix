@@ -54,7 +54,7 @@ public:
     double* T_p;
 
     ScatteringMatrix(Layer* multilayer, Fields* fields, SemiInfMed* inc_med, SemiInfMed* sub_med);
-    void compute_R_T(dcomp* r_p, dcomp* t_p, double* R, double* T);
+    void compute_R_T(dcomp* r_p, dcomp* t_p, double* R_p, double* T_p);
 };
 
 #endif

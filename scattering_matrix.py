@@ -207,14 +207,10 @@ class ScatteringMatrix(object):
         self.t = np.empty(self.fd.num_wvl.value, dtype=np.complex)
         self.R = np.empty(self.fd.num_wvl.value, dtype=np.double)
         self.T = np.empty(self.fd.num_wvl.value, dtype=np.double)
-        self.r_p = c_void_p(self.r.ctypes.data)
-        self.t_p = c_void_p(self.t.ctypes.data)
-        self.R_p = c_void_p(self.R.ctypes.data)
-        self.T_p = c_void_p(self.T.ctypes.data)
         self.sm = lib.NewScatteringMatrix(self.ml.c_layer, self.fd.c_fields, self.incm.c_med, self.subm.c_med)
 
     def solve(self):
         """Solve scattering matrix problem to get reflection and
            transmission coefficients of multilayer
         """
-        lib.ComputeRT(self.sm, self.r_p, self.t_p, self.R_p, self.T_p)
+        lib.ComputeRT(self.sm, self.r.ctypes.data, self.t.ctypes.data, self.R.ctypes.data, self.T.ctypes.data)

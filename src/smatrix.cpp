@@ -30,13 +30,9 @@ SMatrix redheffer(SMatrix SA, SMatrix SB)
 ScatteringMatrix::ScatteringMatrix(Layer* multilayer, Fields* fields, SemiInfMed* inc_med, SemiInfMed* sub_med):
 m_p(multilayer), f_p(fields), inc_p(inc_med), sub_p(sub_med) {}
 
-void ScatteringMatrix::compute_R_T(dcomp* r, dcomp* t, double* R, double* T)
+void ScatteringMatrix::compute_R_T(dcomp* r_p, dcomp* t_p, double* R_p, double* T_p)
 {
     // Fresnel coefficients, reflectance and transmittance
-    r_p = r;
-    t_p = t;
-    R_p = R;
-    T_p = T;
 
     // Compute wavevector components
     f_p->compute_kx_ky(inc_p);
