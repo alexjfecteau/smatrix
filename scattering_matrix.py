@@ -73,7 +73,7 @@ class SemiInfMedNoDisp(object):
 class SemiInfMedDisp(object):
     """Semi-infinite medium with dispersion"""
 
-    def __init__(self, wvl_disp, N_disp, fields):
+    def __init__(self, wvl_disp, N_disp, fields, interp="cubic"):
         """
         Input:
         wvl_disp : Wavelengths array for dispersion relation
@@ -85,14 +85,14 @@ class SemiInfMedDisp(object):
 
         self.wvl = fields.wvl
         self.num_wvl = c_int(len(self.wvl))
-        self.generate_N_for_wvl()
+        self.generate_N_for_wvl(interp)
 
         self.c_med = lib.NewSemiInfMed(self.N.ctypes.data, self.num_wvl)
 
-    def generate_N_for_wvl(self):
-        """Interpolate refractive index for wavelength array using cubic splines"""
-        n_interp = interp1d(self.wvl_disp, self.N_disp.real, kind="cubic")
-        k_interp = interp1d(self.wvl_disp, self.N_disp.imag, kind="cubic")
+    def generate_N_for_wvl(self, interp):
+        """Interpolate refractive index for wavelength array using cubic splines by default"""
+        n_interp = interp1d(self.wvl_disp, self.N_disp.real, kind=interp)
+        k_interp = interp1d(self.wvl_disp, self.N_disp.imag, kind=interp)
 
         self.N = n_interp(self.wvl) + 1j*k_interp(self.wvl)
 
@@ -121,7 +121,7 @@ class SingleLayerNoDisp(object):
 class SingleLayerDisp(object):
     """Single layer of a polar material with dispersion relation"""
 
-    def __init__(self, wvl_disp, N_disp, d, fields):
+    def __init__(self, wvl_disp, N_disp, d, fields, interp="cubic"):
         """
         Input:
         wvl_disp : Wavelengths array for dispersion relation
@@ -133,7 +133,7 @@ class SingleLayerDisp(object):
         self.N_disp = N_disp.astype(np.complex)
 
         self.wvl = fields.wvl
-        self.generate_N_for_wvl()
+        self.generate_N_for_wvl(interp)
 
         self.d = c_double(d)
         self.num_wvl = c_int(len(self.wvl))
@@ -141,10 +141,10 @@ class SingleLayerDisp(object):
 
         self.c_layer = lib.NewSingleLayer(self.N.ctypes.data, self.num_wvl, self.d)
 
-    def generate_N_for_wvl(self):
-        """Interpolate refractive index for new wavelength array using cubic splines"""
-        n_interp = interp1d(self.wvl_disp, self.N_disp.real, kind="cubic")
-        k_interp = interp1d(self.wvl_disp, self.N_disp.imag, kind="cubic")
+    def generate_N_for_wvl(self, interp):
+        """Interpolate refractive index for new wavelength array using cubic splines by default"""
+        n_interp = interp1d(self.wvl_disp, self.N_disp.real, kind=interp)
+        k_interp = interp1d(self.wvl_disp, self.N_disp.imag, kind=interp)
 
         self.N = n_interp(self.wvl) + 1j*k_interp(self.wvl)
 
