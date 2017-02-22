@@ -2,6 +2,7 @@
 
 import os
 import numpy as np
+import solver
 from scipy.interpolate import interp1d
 from ctypes import cdll, windll, wintypes
 from ctypes import c_double, c_int, c_void_p
@@ -214,3 +215,10 @@ class ScatteringMatrix(object):
            transmission coefficients of multilayer
         """
         lib.ComputeRT(self.sm, self.r.ctypes.data, self.t.ctypes.data, self.R.ctypes.data, self.T.ctypes.data)
+
+    def solve_py(self):
+        return solver.computeRT(self.ml, self.fd, self.incm, self.subm)
+
+    def computeE2(self, wvl_id):
+        """Compute squared norm of electric field inside multilayer"""
+        return solver.computeE2(self.ml, self.fd, self.incm, self.subm, wvl_id)
