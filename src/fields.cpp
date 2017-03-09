@@ -9,10 +9,6 @@ using namespace std::complex_literals;
 Fields::Fields(double pTE, double pTM, double theta, double phi, double* wvl_p, int size_wvl):
 pTE(pTE), pTM(pTM), theta(theta), phi(phi), wvl(wvl_p, size_wvl), size_wvl(size_wvl)
 {
-    // Convert angles to radians
-    theta = M_PI*theta/180;
-    phi = M_PI*phi/180;
-
     // Wavevector amplitude in vacuum
     k0 = 2.0*M_PI/wvl;
 

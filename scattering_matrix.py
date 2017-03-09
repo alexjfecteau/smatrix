@@ -49,8 +49,8 @@ class Fields(object):
 
         self.pTE = c_double(pTE)
         self.pTM = c_double(pTM)
-        self.theta = c_double(theta)
-        self.phi = c_double(phi)
+        self.theta = c_double(np.pi*theta/180.)
+        self.phi = c_double(np.pi*phi/180.)
 
         self.c_fields = lib.NewFields(self.pTE, self.pTM, self.theta, self.phi, self.wvl_p, self.num_wvl)
 
@@ -208,13 +208,17 @@ class ScatteringMatrix(object):
         self.t = np.empty(self.fd.num_wvl.value, dtype=np.complex)
         self.R = np.empty(self.fd.num_wvl.value, dtype=np.double)
         self.T = np.empty(self.fd.num_wvl.value, dtype=np.double)
+        self.r_p = c_void_p(self.r.ctypes.data)
+        self.t_p = c_void_p(self.t.ctypes.data)
+        self.R_p = c_void_p(self.R.ctypes.data)
+        self.T_p = c_void_p(self.T.ctypes.data)
         self.sm = lib.NewScatteringMatrix(self.ml.c_layer, self.fd.c_fields, self.incm.c_med, self.subm.c_med)
 
     def solve(self):
         """Solve scattering matrix problem to get reflection and
            transmission coefficients of multilayer
         """
-        lib.ComputeRT(self.sm, self.r.ctypes.data, self.t.ctypes.data, self.R.ctypes.data, self.T.ctypes.data)
+        lib.ComputeRT(self.sm, self.r_p, self.t_p, self.R_p, self.T_p)
 
     def solve_py(self):
         return solver.computeRT(self.ml, self.fd, self.incm, self.subm)

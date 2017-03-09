@@ -119,19 +119,15 @@ def computeE2(ml, fd, incm, subm, wvl_id):
     # List of layers from multilayer object
     layers = layer_list(ml)
 
-    # Convert degrees to radians
-    theta = np.pi*fd.theta.value/180.
-    phi = np.pi*fd.phi.value/180.
-
     # Polarization vector
-    P = polarization(theta, phi, fd.pTE.value, fd.pTM.value)
+    P = polarization(fd.theta.value, fd.phi.value, fd.pTE.value, fd.pTM.value)
 
     # Wavevector in vacuum
     k0 = 2*np.pi/fd.wvl[wvl_id]
 
     # Transverse component of wavevector
-    kx = incm.N[wvl_id]*np.sin(theta)*np.cos(phi)
-    ky = incm.N[wvl_id]*np.sin(theta)*np.sin(phi)
+    kx = incm.N[wvl_id]*np.sin(fd.theta.value)*np.cos(fd.phi.value)
+    ky = incm.N[wvl_id]*np.sin(fd.theta.value)*np.sin(fd.phi.value)
 
     # Homogeneous gap properties
     Q_h = np.mat([[kx*ky, 1.+ky**2], [-(1.+kx**2), -kx*ky]])
@@ -236,12 +232,8 @@ def computeRT(ml, fd, incm, subm):
     # List of layers from multilayer object
     layers = layer_list(ml)
 
-    # Convert degrees to radians
-    theta = np.pi*fd.theta.value/180.
-    phi = np.pi*fd.phi.value/180.
-
     # Polarization vector
-    P = polarization(theta, phi, fd.pTE.value, fd.pTM.value)
+    P = polarization(fd.theta.value, fd.phi.value, fd.pTE.value, fd.pTM.value)
 
     # Reflectance and transmittance
     R = np.empty(fd.num_wvl.value)
@@ -251,8 +243,8 @@ def computeRT(ml, fd, incm, subm):
     for q in range(fd.num_wvl.value):
 
         # Transverse components of wavevector
-        kx = incm.N[q]*np.sin(theta)*np.cos(phi)
-        ky = incm.N[q]*np.sin(theta)*np.sin(phi)
+        kx = incm.N[q]*np.sin(fd.theta.value)*np.cos(fd.phi.value)
+        ky = incm.N[q]*np.sin(fd.theta.value)*np.sin(fd.phi.value)
 
         # Homogeneous gap properties
         Q_h = np.mat([[kx*ky, 1.+ky**2], [-(1.+kx**2), -kx*ky]])
