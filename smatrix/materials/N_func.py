@@ -8,11 +8,20 @@ from io import BytesIO
 
 
 #---------------------------------------------------------#
+# Vacuum
+
+
+def N_vac(w):
+    """Refractive index of vacuum"""
+    return np.ones(len(w))
+
+
+#---------------------------------------------------------#
 # SiC
 
 
-def diel_SiC(w):
-    """Dielectric function of SiC"""
+def N_SiC(w):
+    """Complex refractive index of SiC"""
     eps_inf = 6.7
     w_LO = 1.8253e14  # rad/s
     w_TO = 1.4937e14  # rad/s
@@ -20,15 +29,15 @@ def diel_SiC(w):
 
     num = w**2 - w_LO**2 + 1j*G*w
     den = w**2 - w_TO**2 + 1j*G*w
-    return eps_inf*(num/den)
+    return np.sqrt(eps_inf*(num/den))
 
 
 #---------------------------------------------------------#
 # AlN
 
-def epsilon_AlN(w):
+def N_AlN(w):
     """
-    Dielectric function of AlN
+    Complex refractive index of AlN
     Lorentz model with parameters from Akasaki et al. (1967)
     """
     eps_0 = 8.50
@@ -37,7 +46,7 @@ def epsilon_AlN(w):
     G = 0.01
 
     eps = eps_inf + (eps_0 - eps_inf)/(1. - (w/w_TO)**2 - 1j*G*(w/w_TO))
-    return eps
+    return np.sqrt(eps)
 
 
 #---------------------------------------------------------#
@@ -60,19 +69,11 @@ omeg_k_SiO2 = 2*cst.pi*cst.c/wvl_k_SiO2  # rad/s
 k_SiO2_Palik = data_k_SiO2[:, 1]
 
 
-def diel_SiO2(w):
-    """Dielectric function of SiO2"""
+def N_SiO2(w):
+    """Refractive index of SiO2"""
 
     # Interpolate n&k with cubic spline
     n_SiO2_itp_func = interp1d(omeg_n_SiO2, n_SiO2_Palik, kind="cubic")
     k_SiO2_itp_func = interp1d(omeg_k_SiO2, k_SiO2_Palik, kind="cubic")
 
-    return (n_SiO2_itp_func(w) + 1j*k_SiO2_itp_func(w))**2
-
-#---------------------------------------------------------#
-# Vacuum
-
-
-def diel_vac(w):
-    """Dielectric function of vacuum"""
-    return np.ones(len(w))
+    return n_SiO2_itp_func(w) + 1j*k_SiO2_itp_func(w)
