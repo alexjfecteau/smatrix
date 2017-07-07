@@ -37,6 +37,20 @@ def layer_list(input_layer):
     return output_layers
 
 
+def layer_positions(input_layer):
+    """
+    Input  : Multilayer
+    Output : Array of layer positions in the multilayer
+    """
+    layers = layer_list(input_layer)
+    z_i = 0.
+    pos = []
+    for layer in layers:
+        pos.append(z_i)
+        z_i += layer.d.value
+    return np.array(pos)
+
+
 def polarization(theta, phi, pTE, pTM):
     """Polarization vector of incident fields"""
     k_inc = np.array([np.sin(theta)*np.cos(phi), np.sin(theta)*np.sin(phi), np.cos(theta)])

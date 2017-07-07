@@ -167,6 +167,11 @@ class MultiLayer(object):
         self.thk = c_double()
         lib.GetThkLayer(byref(self.thk))
 
+    def get_layer_positions(self):
+        """Compute position of each layers in the multilayer
+        """
+        return solver.layer_positions(self)
+
 
 class ScatteringMatrix(object):
 
