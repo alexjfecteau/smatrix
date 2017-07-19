@@ -156,7 +156,7 @@ class MultiLayer(object):
         lib.ClearUnitCell(self.c_layer)
 
     def set_num_repetitions(self, num):
-        """Define number of repetitons of unit cell
+        """Define number of repetitions of unit cell
         """
         self.num_uc.value = num
         lib.SetNumRepetitions(self.c_layer, num)
