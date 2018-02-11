@@ -13,7 +13,7 @@
 extern "C" {
 
 // Fields
-DLLEXPORT Fields* NewFields(double pTE, double pTM, double theta, double phi, double* wvl_p, int size_wvl, double N_inc, double N_sub)
+DLLEXPORT Fields* NewFields(double pTE, double pTM, double theta, double phi, double* wvl_p, int size_wvl)
     {
         Fields* f_p = new Fields(pTE, pTM, theta, phi, wvl_p, size_wvl);
         return f_p;

@@ -1,5 +1,4 @@
 
-#define EIGEN_USE_MKL_ALL
 #include "smatrix.h"
 #include "layers.h"
 #include "sinfmed.h"

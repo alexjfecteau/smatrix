@@ -2,10 +2,9 @@
 
 import os
 import numpy as np
-import solver
-from scipy.interpolate import interp1d
+from smatrix import solver
 from ctypes import cdll, windll, wintypes
-from ctypes import c_double, c_int, c_void_p
+from ctypes import c_double, c_int, c_void_p, POINTER
 from ctypes import byref
 
 kernel32 = windll.LoadLibrary('kernel32')
@@ -30,7 +29,7 @@ def close_session():
     del lib
 
 
-class Fields(object):
+class Fields:
 
     """Properties of EM fields"""
 
@@ -44,7 +43,6 @@ class Fields(object):
         phi     : Angle of incidence on surface plane (degrees)
         """
         self.wvl = wvl.astype(np.double)
-        self.wvl_p = c_void_p(self.wvl.ctypes.data)
         self.num_wvl = c_int(len(self.wvl))
 
         self.pTE = c_double(pTE)
@@ -52,10 +50,12 @@ class Fields(object):
         self.theta = c_double(np.pi*theta/180.)
         self.phi = c_double(np.pi*phi/180.)
 
-        self.c_fields = lib.NewFields(self.pTE, self.pTM, self.theta, self.phi, self.wvl_p, self.num_wvl)
+        lib.NewFields.argtypes = [c_double, c_double, c_double, c_double, np.ctypeslib.ndpointer(np.double, ndim=1, flags="C"), c_int]
+        lib.NewFields.restype = c_void_p
+        self.c_fields = c_void_p(lib.NewFields(self.pTE, self.pTM, self.theta, self.phi, self.wvl, self.num_wvl))
 
 
-class SemiInfMedNoDisp(object):
+class SemiInfMedNoDisp:
     """Semi-infinite medium with no dispersion"""
 
     def __init__(self, n, fields):
@@ -68,10 +68,12 @@ class SemiInfMedNoDisp(object):
         self.N = n*np.ones(len(self.wvl), dtype=np.complex)
         self.num_wvl = c_int(len(self.wvl))
 
-        self.c_med = lib.NewSemiInfMed(self.N.ctypes.data, self.num_wvl)
+        lib.NewSemiInfMed.argtypes = [np.ctypeslib.ndpointer(np.complex, ndim=1, flags="C"), c_int]
+        lib.NewSemiInfMed.restype = c_void_p
+        self.c_med = c_void_p(lib.NewSemiInfMed(self.N, self.num_wvl))
 
 
-class SemiInfMedDisp(object):
+class SemiInfMedDisp:
     """Semi-infinite medium with dispersion"""
 
     def __init__(self, N_func, fields):
@@ -81,14 +83,16 @@ class SemiInfMedDisp(object):
         fields   : Incident electric field object
         """
         self.wvl = fields.wvl
-        self.N = N_func(self.wvl)
+        self.N = N_func(self.wvl).astype(np.complex)
 
         self.num_wvl = c_int(len(self.wvl))
 
-        self.c_med = lib.NewSemiInfMed(self.N.ctypes.data, self.num_wvl)
+        lib.NewSemiInfMed.argtypes = [np.ctypeslib.ndpointer(np.complex, ndim=1, flags="C"), c_int]
+        lib.NewSemiInfMed.restype = c_void_p
+        self.c_med = c_void_p(lib.NewSemiInfMed(self.N, self.num_wvl))
 
 
-class SingleLayerNoDisp(object):
+class SingleLayerNoDisp:
     """Single layer of a simple material with no dispersion"""
 
     def __init__(self, n, d, fields):
@@ -105,10 +109,12 @@ class SingleLayerNoDisp(object):
         self.num_wvl = c_int(len(self.wvl))
         self.num_z = 0
 
-        self.c_layer = lib.NewSingleLayer(self.N.ctypes.data, self.num_wvl, self.d)
+        lib.NewSingleLayer.argtypes = [np.ctypeslib.ndpointer(np.complex, ndim=1, flags="C"), c_int, c_double]
+        lib.NewSingleLayer.restype = c_void_p
+        self.c_layer = c_void_p(lib.NewSingleLayer(self.N, self.num_wvl, self.d))
 
 
-class SingleLayerDisp(object):
+class SingleLayerDisp:
     """Single layer of a polar material with dispersion relation"""
 
     def __init__(self, N_func, d, fields):
@@ -119,16 +125,18 @@ class SingleLayerDisp(object):
         fields   : Incident electric field object
         """
         self.wvl = fields.wvl
-        self.N = N_func(self.wvl)
+        self.N = N_func(self.wvl).astype(np.complex)
         self.d = c_double(d)
 
         self.num_wvl = c_int(len(self.wvl))
         self.num_z = 0
 
-        self.c_layer = lib.NewSingleLayer(self.N.ctypes.data, self.num_wvl, self.d)
+        lib.NewSingleLayer.argtypes = [np.ctypeslib.ndpointer(np.complex, ndim=1, flags="C"), c_int, c_double]
+        lib.NewSingleLayer.restype = c_void_p
+        self.c_layer = c_void_p(lib.NewSingleLayer(self.N, self.num_wvl, self.d))
 
 
-class MultiLayer(object):
+class MultiLayer:
 
     """Multilayer made of single layers or other multilayers
     """
@@ -139,7 +147,8 @@ class MultiLayer(object):
         self.num_uc = c_int(1)   # Number of repetitions of unit cell
         self.num_z = 0           # Number of positions inside multilayer
 
-        self.c_layer = lib.NewMultiLayer()
+        lib.NewMultiLayer.restype = c_void_p
+        self.c_layer = c_void_p(lib.NewMultiLayer())
         self.add_to_unit_cell(*layers)
 
     def add_to_unit_cell(self, *layers):
@@ -173,7 +182,7 @@ class MultiLayer(object):
         return solver.layer_positions(self)
 
 
-class ScatteringMatrix(object):
+class ScatteringMatrix:
 
     """Scattering matrix for multilayer
     """
@@ -185,21 +194,27 @@ class ScatteringMatrix(object):
         self.incm = inc_med
         self.subm = sub_med
         self.wvl = self.fd.wvl
+
         self.r = np.empty(self.fd.num_wvl.value, dtype=np.complex)
         self.t = np.empty(self.fd.num_wvl.value, dtype=np.complex)
         self.R = np.empty(self.fd.num_wvl.value, dtype=np.double)
         self.T = np.empty(self.fd.num_wvl.value, dtype=np.double)
-        self.r_p = c_void_p(self.r.ctypes.data)
-        self.t_p = c_void_p(self.t.ctypes.data)
-        self.R_p = c_void_p(self.R.ctypes.data)
-        self.T_p = c_void_p(self.T.ctypes.data)
-        self.sm = lib.NewScatteringMatrix(self.ml.c_layer, self.fd.c_fields, self.incm.c_med, self.subm.c_med)
+
+        lib.NewScatteringMatrix.argtypes = [c_void_p, c_void_p, c_void_p, c_void_p]
+        lib.NewScatteringMatrix.restype = c_void_p
+        self.sm = c_void_p(lib.NewScatteringMatrix(self.ml.c_layer, self.fd.c_fields, self.incm.c_med, self.subm.c_med))
 
     def solve(self):
         """Solve scattering matrix problem to get reflection and
            transmission coefficients of multilayer
         """
-        lib.ComputeRT(self.sm, self.r_p, self.t_p, self.R_p, self.T_p)
+        lib.ComputeRT.argtypes = [c_void_p,
+                                  np.ctypeslib.ndpointer(np.complex, ndim=1, flags="C"),
+                                  np.ctypeslib.ndpointer(np.complex, ndim=1, flags="C"),
+                                  np.ctypeslib.ndpointer(np.double, ndim=1, flags="C"),
+                                  np.ctypeslib.ndpointer(np.double, ndim=1, flags="C")]
+
+        lib.ComputeRT(self.sm, self.r, self.t, self.R, self.T)
 
     def solve_py(self):
         return solver.computeRT(self.ml, self.fd, self.incm, self.subm)

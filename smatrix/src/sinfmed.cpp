@@ -1,5 +1,4 @@
 
-#define EIGEN_USE_MKL_ALL
 #include "sinfmed.h"
 #include "fields.h"
 #include <unsupported/Eigen/MatrixFunctions>

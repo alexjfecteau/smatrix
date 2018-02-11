@@ -1,5 +1,4 @@
 
-#define EIGEN_USE_MKL_ALL
 #include "fields.h"
 #include "sinfmed.h"
 
