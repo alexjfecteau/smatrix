@@ -120,7 +120,7 @@ def S_trn(kx, ky, kz, V_h):
     return S
 
 
-def computeE2(ml, fd, incm, subm, wvl_id):
+def computeE2(ml, fd, incm, subm, wvl_id, z_res):
     """
     Input:
     ml      : Multilayer
@@ -128,6 +128,7 @@ def computeE2(ml, fd, incm, subm, wvl_id):
     incm    : Medium of incidence
     subm    : Medium of reflection
     wvl_id  : Index of selected wavelength
+    z_res   : Resolution of depth inside multilayer
     """
 
     # List of layers from multilayer object
@@ -212,7 +213,7 @@ def computeE2(ml, fd, incm, subm, wvl_id):
         c_h_list.append(c_h_2)
 
         # Positions inside layer
-        z_i = np.arange(0., layers[m].d.value, 5e-8)
+        z_i = np.arange(0., layers[m].d.value, z_res)
 
         # Squared electric field
         E2_i = []

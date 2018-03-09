@@ -219,6 +219,6 @@ class ScatteringMatrix:
     def solve_py(self):
         return solver.computeRT(self.ml, self.fd, self.incm, self.subm)
 
-    def computeE2(self, wvl_id):
+    def computeE2(self, wvl_id, z_res=5e-8):
         """Compute squared norm of electric field inside multilayer"""
-        return solver.computeE2(self.ml, self.fd, self.incm, self.subm, wvl_id)
+        return solver.computeE2(self.ml, self.fd, self.incm, self.subm, wvl_id, z_res)
