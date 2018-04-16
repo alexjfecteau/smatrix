@@ -195,8 +195,10 @@ class ScatteringMatrix:
         self.subm = sub_med
         self.wvl = self.fd.wvl
 
-        self.r = np.empty(self.fd.num_wvl.value, dtype=np.complex)
-        self.t = np.empty(self.fd.num_wvl.value, dtype=np.complex)
+        self.r_TE = np.empty(self.fd.num_wvl.value, dtype=np.complex)
+        self.t_TE = np.empty(self.fd.num_wvl.value, dtype=np.complex)
+        self.r_TM = np.empty(self.fd.num_wvl.value, dtype=np.complex)
+        self.t_TM = np.empty(self.fd.num_wvl.value, dtype=np.complex)
         self.R = np.empty(self.fd.num_wvl.value, dtype=np.double)
         self.T = np.empty(self.fd.num_wvl.value, dtype=np.double)
 
@@ -211,10 +213,12 @@ class ScatteringMatrix:
         lib.ComputeRT.argtypes = [c_void_p,
                                   np.ctypeslib.ndpointer(np.complex, ndim=1, flags="C"),
                                   np.ctypeslib.ndpointer(np.complex, ndim=1, flags="C"),
+                                  np.ctypeslib.ndpointer(np.complex, ndim=1, flags="C"),
+                                  np.ctypeslib.ndpointer(np.complex, ndim=1, flags="C"),
                                   np.ctypeslib.ndpointer(np.double, ndim=1, flags="C"),
                                   np.ctypeslib.ndpointer(np.double, ndim=1, flags="C")]
 
-        lib.ComputeRT(self.sm, self.r, self.t, self.R, self.T)
+        lib.ComputeRT(self.sm, self.r_TE, self.t_TE, self.r_TM, self.t_TM, self.R, self.T)
 
     def solve_py(self):
         return solver.computeRT(self.ml, self.fd, self.incm, self.subm)

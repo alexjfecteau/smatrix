@@ -1,1 +1,1 @@
-cl /LD /I C:\Users\alexj\Documents\Programmes\Eigen\eigen-eigen-dc6cfdf9bcec /Fe..\bin\smatrix main.cpp smatrix.cpp layers.cpp sinfmed.cpp fields.cpp
+cl /EHsc /LD /I C:\Users\alexj\Documents\Programmes\Eigen\eigen-eigen-dc6cfdf9bcec /Fe..\bin\smatrix main.cpp smatrix.cpp layers.cpp sinfmed.cpp fields.cpp

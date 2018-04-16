@@ -48,13 +48,15 @@ public:
     Fields* f_p;
     SemiInfMed* inc_p;
     SemiInfMed* sub_p;
-    dcomp* r_p;
-    dcomp* t_p;
+    dcomp* r_TE_p;
+    dcomp* t_TE_p;
+    dcomp* r_TM_p;
+    dcomp* t_TM_p;
     double* R_p;
     double* T_p;
 
     ScatteringMatrix(Layer* multilayer, Fields* fields, SemiInfMed* inc_med, SemiInfMed* sub_med);
-    void compute_R_T(dcomp* r_p, dcomp* t_p, double* R_p, double* T_p);
+    void compute_R_T(dcomp* r_TE_p, dcomp* t_TE_p, dcomp* r_TM_p, dcomp* t_TM_p, double* R_p, double* T_p);
 };
 
 #endif
