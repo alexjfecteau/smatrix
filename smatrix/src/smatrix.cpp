@@ -60,12 +60,12 @@ void ScatteringMatrix::compute_R_T(dcomp* r_TE_p, dcomp* t_TE_p, dcomp* r_TM_p, 
         f_p->compute_E_refl_tran(SGlob, inc_p, sub_p, q);
 
         // Compute Fresnel coefficients for TE polarization
-        r_TE_p[q] = f_p->aTE.dot(f_p->E_refl);
-        t_TE_p[q] = f_p->aTE.dot(f_p->E_tran);
+        r_TE_p[q] = f_p->aTE.dot(f_p->E_refl)/(f_p->aTE.dot(f_p->P));
+        t_TE_p[q] = f_p->aTE.dot(f_p->E_tran)/(f_p->aTE.dot(f_p->P));
 
         // Compute Fresnel coefficients for TM polarization
-        r_TM_p[q] = f_p->aTM.dot(f_p->E_refl);
-        t_TM_p[q] = f_p->aTM.dot(f_p->E_tran);
+        r_TM_p[q] = -f_p->aTM.dot(f_p->E_refl)/(f_p->aTM.dot(f_p->P));
+        t_TM_p[q] = -f_p->aTM.dot(f_p->E_tran)/(f_p->aTM.dot(f_p->P));
 
         // Compute reflectance and transmittance
         R_p[q] = f_p->E_refl.squaredNorm();
