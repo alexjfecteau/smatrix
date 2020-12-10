@@ -103,6 +103,7 @@ class SingleLayerNoDisp:
         fields : Incident electric field object
         """
         self.wvl = fields.wvl
+        self.N_func = lambda wvl: n
         self.N = n*np.ones(len(self.wvl), dtype=np.complex)
         self.d = c_double(d)
 
@@ -125,7 +126,8 @@ class SingleLayerDisp:
         fields   : Incident electric field object
         """
         self.wvl = fields.wvl
-        self.N = N_func(self.wvl).astype(np.complex)
+        self.N_func = N_func
+        self.N = self.N_func(self.wvl).astype(np.complex)
         self.d = c_double(d)
 
         self.num_wvl = c_int(len(self.wvl))
@@ -181,6 +183,15 @@ class MultiLayer:
         """
         return solver.layer_positions(self)
 
+    def get_layer_thicknesses(self):
+        """Compute thickness of each layers in the multilayer
+        """
+        return solver.layer_thicknesses(self)
+
+    def get_layer_refractive_index(self, wvl):
+        """Compute refractive index of each layers in the multilayer at wvl
+        """
+        return solver.layer_refractive_index(self, wvl)
 
 class ScatteringMatrix:
 
@@ -222,6 +233,9 @@ class ScatteringMatrix:
 
     def solve_py(self):
         return solver.computeRT(self.ml, self.fd, self.incm, self.subm)
+
+    def compute_bloch_vector(self, wvl_id, kx, ky):
+        return solver.compute_bloch_vector(self.ml.unit_cell, self.fd, wvl_id, kx, ky)
 
     def computeE2(self, wvl_id, z_res=5e-8):
         """Compute squared norm of electric field inside multilayer"""

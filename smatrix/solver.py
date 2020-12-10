@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+from scipy.linalg import eig
 
 # Identity matrix
 Id = np.mat([[1, 0], [0, 1]])
+
+# Zeroes matrix
+Zs = np.mat([[0, 0], [0, 0]])
 
 
 def redheffer(SA, SB):
@@ -43,7 +47,7 @@ def layer_positions(input_layer):
     Output : Array of layer positions in the multilayer
     """
     layers = layer_list(input_layer)
-    z_i = 0.
+    z_i = 0
     pos = []
     for layer in layers:
         pos.append(z_i)
@@ -51,13 +55,38 @@ def layer_positions(input_layer):
     return np.array(pos)
 
 
+def layer_thicknesses(input_layer):
+    """
+    Input  : Multilayer
+    Output : Array of layer thicknesses in the multilayer
+    """
+    layers = layer_list(input_layer)
+    dz = []
+    for layer in layers:
+        dz.append(layer.d.value)
+    return np.array(dz)
+
+
+def layer_refractive_index(input_layer, wvl):
+    """
+    Input  : Multilayer
+    wvl    : Wavelength of incident field
+    Output : Array of refractive index at wvl for each layer in the multilayer
+    """
+    layers = layer_list(input_layer)
+    N = []
+    for layer in layers:
+        N.append(layer.N_func(wvl))
+    return np.array(N)
+
+
 def polarization(theta, phi, pTE, pTM):
     """Polarization vector of incident fields"""
     k_inc = np.array([np.sin(theta)*np.cos(phi), np.sin(theta)*np.sin(phi), np.cos(theta)])
-    az = np.array([0., 0., 1.])
+    az = np.array([0, 0, 1])
 
     if theta == 0:
-        aTE = np.array([0., 1., 0.])
+        aTE = np.array([0, 1, 0])
     else:
         aTE = np.cross(az, k_inc)
         aTE = aTE/np.linalg.norm(aTE)
@@ -145,7 +174,7 @@ def computeE2(ml, fd, incm, subm, wvl_id, z_res):
     ky = incm.N[wvl_id]*np.sin(fd.theta.value)*np.sin(fd.phi.value)
 
     # Homogeneous gap properties
-    Q_h = np.mat([[kx*ky, 1.+ky**2], [-(1.+kx**2), -kx*ky]])
+    Q_h = np.mat([[kx*ky, 1+ky**2], [-(1+kx**2), -kx*ky]])
     V_h = -1j*Q_h
 
     # Reflection matrix
@@ -234,6 +263,42 @@ def computeE2(ml, fd, incm, subm, wvl_id, z_res):
 
     return z_arr, E2_arr
 
+
+def compute_bloch_vector(ml_uc, fd, wvl_id, kx, ky):
+    """
+    Input:
+    ml_uc   : Multilayer's unit cell
+    fd      : Incident fields
+    wvl_id  : Index of selected wavelength
+    """
+
+    # List of layers from multilayer object
+    layers = ml_uc
+
+    # Transverse component of wavevector
+    #kx = np.sin(fd.theta.value)*np.cos(fd.phi.value)
+    #ky = np.sin(fd.theta.value)*np.sin(fd.phi.value)
+
+    # Homogeneous gap properties
+    Q_h = np.mat([[kx*ky, 1+ky**2], [-(1+kx**2), -kx*ky]])
+    V_h = -1j*Q_h
+
+    # Initialize unit cell scattering matrix
+    S_uc = np.bmat([[Zs, Id], [Id, Zs]])
+
+    # Compute unit cell scattering matrix
+    S_list = []
+    for layer in layers:
+        kz = np.sqrt(layer.N[wvl_id]**2 - kx**2 - ky**2)
+        S_i = S_layer(kx, ky, kz, fd.wvl[wvl_id], V_h, layer.d.value)
+        S_list.append(S_i)
+        S_uc = redheffer(S_uc, S_i)
+    
+    # Solve eigenvalues problem
+    A = np.bmat([[S_uc[0:2, 0:2], -Id], [S_uc[2:4, 0:2], Zs]])
+    B = np.bmat([[Zs, -S_uc[0:2, 2:4]], [Id, -S_uc[2:4, 2:4]]])
+    eig_val, eig_vec = eig(a=A, b=B)
+    return np.log(eig_val)/1j
 
 def computeRT(ml, fd, incm, subm):
     """
